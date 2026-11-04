@@ -1,8 +1,8 @@
+
 module.exports = {
   botName: "SMV-Assistent",
   familyName: "Sedoij Medved",
   shortName: "SMV",
-
   nicknamePrefix: "SMV I",
 
   embedColor: 0x2b2d31,
@@ -18,18 +18,21 @@ module.exports = {
   // Aufstellung
   lineupChannelId: "1451318638601830550",
   timezone: "Europe/Berlin",
-  lineupStartTimeText: "20:30 - 21:00",
 
-  // Automatische Aufstellungsankündigung ab 12:00 Uhr
+  // Dienstag, Donnerstag, Samstag: 20:00–20:30 Uhr
+  lineupStartTimeText: "20:00 - 20:30",
+
+  // Ankündigung um 12:00 Uhr
   lineupAnnouncementHour: 12,
   lineupAnnouncementMinute: 0,
 
+  // Mittwoch und Sonntag unverändert
   lineupSpecialStartTimes: {
     Mittwoch: "19:30 - 20:00",
     Sonntag: "19:30 - 20:00",
   },
 
-  lineupEventStartText: "Mi. & So. um 19:30 Uhr, sonst um 20:30 Uhr",
+  lineupEventStartText: "Mi. & So. um 19:30 Uhr, sonst um 20:00 Uhr",
 
   // Leaderpanel
   leaderPanelChannelId: "1508284451858153562",
@@ -97,7 +100,8 @@ module.exports = {
     "1418628359054688530",
   ],
 
-  // Sobald ein User eine dieser Rollen hat, wird Zahlende/r entfernt
+  // Sobald ein User eine dieser Rollen hat,
+  // wird Zahlende/r entfernt
   payerExemptRoleIds: [
     "1434318021467439198",
     "1434318021467439196",
@@ -105,7 +109,7 @@ module.exports = {
     "1434318021412786317",
   ],
 
-  // Rollen, die nach Registrierung automatisch vergeben werden
+  // Rollen nach Registrierung
   registeredRoleIds: [
     "1451314176004984912",
     "1434318021412786308",
@@ -119,18 +123,18 @@ module.exports = {
     "1451629804221894868",
   ],
 
-  // Diese Zusatzrollen dürfen Sanktionen erstellen
+  // Zusatzrollen für Sanktionen
   sanctionCreatorRoleIds: [
     "1455642939131691141",
   ],
 
-  // Nur diese Rollen dürfen Fußball-Events erstellen
+  // Fußball-Events erstellen
   footballCreatorRoleIds: [
     "1455643015820480582",
     "1451315550394515516",
   ],
 
-  // Nur diese Rollen dürfen Fußball-Events absagen, wieder öffnen oder Uhrzeit ändern
+  // Fußball-Events verwalten
   footballManageRoleIds: [
     "1455643015820480582",
     "1451315550394515516",
