@@ -37,10 +37,13 @@ const lineupForceTodayCommand = new SlashCommandBuilder()
 // =====================================================
 
 function isLineupDay(weekday) {
+  // CDC: Jeden Tag ist Aufstellung, auch Montag und Freitag.
   return [
+    "Montag",
     "Dienstag",
     "Mittwoch",
     "Donnerstag",
+    "Freitag",
     "Samstag",
     "Sonntag",
   ].includes(weekday);
@@ -75,7 +78,7 @@ function getLineupStartText(lineup) {
 
 function parseLineupStartMinutes(startText) {
   const match = String(startText || "").match(/(\d{1,2})[:.](\d{2})/);
-  if (!match) return 20 * 60 + 30;
+  if (!match) return 20 * 60;
 
   const hours = Math.min(Math.max(Number(match[1]) || 0, 0), 23);
   const minutes = Math.min(Math.max(Number(match[2]) || 0, 0), 59);
@@ -224,9 +227,6 @@ function createLineupEmbed(lineup) {
         "**Event Info:**",
         `📅 **Datum:** ${lineup.dateText}`,
         `🕘 **Beginn:** ${getLineupStartText(lineup)}`,
-        ["Mittwoch", "Sonntag"].includes(lineup.weekday)
-          ? "ℹ️ **Hinweis:** Mittwoch & Sonntag beginnt die Aufstellung früher."
-          : null,
         "",
         "**Deskription:**",
         "✅ Ihr schafft es pünktlich zur Aufstellung zu kommen.",
@@ -424,7 +424,7 @@ async function announceLineupCancelled(client, lineup, leaderId) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "🐻 **SMV AUFSTELLUNG ABGESAGT**",
+      "🛑 **CDC AUFSTELLUNG ABGESAGT**",
       "",
       "Die heutige Aufstellung wurde von der Leaderschaft abgesagt.",
       "",
@@ -441,7 +441,7 @@ async function announceLineupReopened(client, lineup, leaderId) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "🔓 **SMV AUFSTELLUNG WIEDER GEÖFFNET**",
+      "🔓 **CDC AUFSTELLUNG WIEDER GEÖFFNET**",
       "",
       "Die heutige Aufstellung wurde wieder geöffnet.",
       "",
@@ -759,7 +759,7 @@ async function cancelLineup(client, interaction, dateKey, alreadyAcknowledged = 
   await updateLineupMessage(client, lineup);
   await announceLineupCancelled(client, lineup, interaction.user.id);
 
-  const doneMessage = "✅ Aufstellung wurde abgesagt und die SMV-Rolle wurde informiert.";
+  const doneMessage = "✅ Aufstellung wurde abgesagt und die CDC-Rolle wurde informiert.";
 
   if (alreadyAcknowledged && interaction.followUp) {
     return interaction.followUp({
@@ -812,7 +812,7 @@ async function reopenLineup(client, interaction, dateKey, alreadyAcknowledged = 
   await updateLineupMessage(client, lineup);
   await announceLineupReopened(client, lineup, interaction.user.id);
 
-  const doneMessage = "✅ Aufstellung wurde wieder geöffnet und die SMV-Rolle wurde informiert.";
+  const doneMessage = "✅ Aufstellung wurde wieder geöffnet und die CDC-Rolle wurde informiert.";
 
   if (alreadyAcknowledged && interaction.followUp) {
     return interaction.followUp({
@@ -860,7 +860,7 @@ async function changeLineupTime(client, interaction, dateKey) {
   await announceLineupTimeChanged(client, lineup, oldTime, newTime, interaction.user.id);
 
   return safeReply(interaction, {
-    content: `✅ Aufstellungsuhrzeit wurde von **${oldTime}** auf **${newTime}** geändert und die SMV-Rolle wurde informiert.`,
+    content: `✅ Aufstellungsuhrzeit wurde von **${oldTime}** auf **${newTime}** geändert und die CDC-Rolle wurde informiert.`,
     ephemeral: true,
   });
 }
@@ -897,7 +897,7 @@ async function checkLineupReminders(client) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "⏰ **SMV AUFSTELLUNGS-ERINNERUNG**",
+      "⏰ **CDC AUFSTELLUNGS-ERINNERUNG**",
       "",
       "Die Aufstellung beginnt in ungefähr **30 Minuten**.",
       "",
