@@ -4,114 +4,294 @@ const {
   checkLineupClosures,
 } = require("./systems/lineup");
 
-const { checkOverdueSanctions } = require("./systems/sanctions");
-const { cleanupExpiredAbsences, scanOldBotAbsences } = require("./systems/absences");
+const {
+  checkOverdueSanctions,
+} = require("./systems/sanctions");
+
+const {
+  cleanupExpiredAbsences,
+  scanOldBotAbsences,
+} = require("./systems/absences");
+
+// =====================================================
+// CC SCHEDULER
+// =====================================================
 
 let schedulerInterval = null;
 let initialRunDone = false;
+let schedulerRunning = false;
 
-async function runSchedulerOnce(client, reason = "interval") {
-  try {
-    await checkDailyLineup(client);
-  } catch (error) {
-    console.error(`❌ Scheduler-Fehler bei checkDailyLineup (${reason}):`, error);
+// =====================================================
+// REGELMÄSSIGE PRÜFUNGEN
+// =====================================================
+
+async function runSchedulerOnce(
+  client,
+  reason = "interval"
+) {
+  if (schedulerRunning) {
+    console.log(
+      `ℹ️ Scheduler-Prüfung (${reason}) übersprungen: vorherige Prüfung läuft noch.`
+    );
+    return;
   }
 
-  try {
-    await checkLineupReminders(client);
-  } catch (error) {
-    console.error(`❌ Scheduler-Fehler bei checkLineupReminders (${reason}):`, error);
-  }
+  schedulerRunning = true;
 
   try {
-    await checkLineupClosures(client);
-  } catch (error) {
-    console.error(`❌ Scheduler-Fehler bei checkLineupClosures (${reason}):`, error);
-  }
+    // =================================================
+    // TÄGLICHE AUFSTELLUNG
+    // =================================================
 
-  try {
-    await checkOverdueSanctions(client);
-  } catch (error) {
-    console.error(`❌ Scheduler-Fehler bei checkOverdueSanctions (${reason}):`, error);
-  }
+    // Nach 12 Uhr fehlende Aufstellung erstellen.
+    // Auch nach Neustart oder Railway-Deploy.
+    try {
+      await checkDailyLineup(client);
+    } catch (error) {
+      console.error(
+        `❌ Scheduler: Aufstellung (${reason}):`,
+        error
+      );
+    }
 
-  try {
-    await cleanupExpiredAbsences(client, { scanFirst: false });
-  } catch (error) {
-    console.error(`❌ Scheduler-Fehler bei cleanupExpiredAbsences (${reason}):`, error);
+    // =================================================
+    // AUFSTELLUNGS-ERINNERUNGEN
+    // =================================================
+
+    try {
+      await checkLineupReminders(client);
+    } catch (error) {
+      console.error(
+        `❌ Scheduler: Erinnerung (${reason}):`,
+        error
+      );
+    }
+
+    // =================================================
+    // AUFSTELLUNGEN SCHLIESSEN
+    // =================================================
+
+    try {
+      await checkLineupClosures(client);
+    } catch (error) {
+      console.error(
+        `❌ Scheduler: Schließcheck (${reason}):`,
+        error
+      );
+    }
+
+    // =================================================
+    // OFFENE SANKTIONEN PRÜFEN
+    // =================================================
+
+    try {
+      await checkOverdueSanctions(client);
+    } catch (error) {
+      console.error(
+        `❌ Scheduler: Sanktionen (${reason}):`,
+        error
+      );
+    }
+
+    // =================================================
+    // ABGELAUFENE ABMELDUNGEN
+    // =================================================
+
+    try {
+      await cleanupExpiredAbsences(
+        client,
+        {
+          scanFirst: false,
+        }
+      );
+    } catch (error) {
+      console.error(
+        `❌ Scheduler: Abmeldungen (${reason}):`,
+        error
+      );
+    }
+
+  } finally {
+    schedulerRunning = false;
   }
 }
+
+// =====================================================
+// STARTPRÜFUNGEN
+// =====================================================
 
 async function runInitialChecks(client) {
-  if (initialRunDone) return;
+  if (initialRunDone) {
+    return;
+  }
+
   initialRunDone = true;
 
-  console.log("🔄 Starte initiale Bot-Prüfungen...");
+  console.log(
+    "🔄 Starte initiale CC-Bot-Prüfungen ..."
+  );
+
+  // Die heutige Aufstellung wird bereits durch
+  // runSchedulerOnce beim Start geprüft.
+  // Keine zweite parallele Aufstellung erstellen.
+
+  // ===================================================
+  // ALTE ABMELDUNGEN SCANNEN
+  // ===================================================
 
   try {
-    const scanResult = await scanOldBotAbsences(client, 1000);
-    console.log(
-      `✅ Abmeldungs-Scan abgeschlossen. Gescannte Nachrichten: ${scanResult.scanned}, neu übernommen: ${scanResult.added}`
+    const result = await scanOldBotAbsences(
+      client,
+      1000
     );
+
+    console.log(
+      `✅ Abmeldungs-Scan: ` +
+      `${result.scanned} geprüft, ` +
+      `${result.added} übernommen.`
+    );
+
   } catch (error) {
-    console.error("❌ Fehler beim initialen Abmeldungs-Scan:", error);
+    console.error(
+      "❌ Initialer Abmeldungs-Scan:",
+      error
+    );
   }
 
+  // ===================================================
+  // ABMELDUNGEN BEREINIGEN
+  // ===================================================
+
   try {
-    const cleanupResult = await cleanupExpiredAbsences(client, { scanFirst: false });
-    console.log(
-      `✅ Abmeldungs-Löschcheck abgeschlossen. Geprüft: ${cleanupResult.checked}, gelöscht: ${cleanupResult.deleted}, bereinigt: ${cleanupResult.missingCleaned}, fehlgeschlagen: ${cleanupResult.failed}`
+    const result = await cleanupExpiredAbsences(
+      client,
+      {
+        scanFirst: false,
+      }
     );
+
+    console.log(
+      `✅ Abmeldungs-Bereinigung: ` +
+      `${result.checked} geprüft, ` +
+      `${result.deleted} gelöscht, ` +
+      `${result.missingCleaned} bereinigt, ` +
+      `${result.failed} fehlgeschlagen.`
+    );
+
   } catch (error) {
-    console.error("❌ Fehler beim initialen Abmeldungs-Löschcheck:", error);
+    console.error(
+      "❌ Initiale Abmeldungs-Bereinigung:",
+      error
+    );
   }
+
+  // ===================================================
+  // SCHLIESSCHECK
+  // ===================================================
 
   try {
     await checkLineupClosures(client);
   } catch (error) {
-    console.error("❌ Fehler beim initialen Aufstellungs-Schließcheck:", error);
+    console.error(
+      "❌ Initialer Aufstellungs-Schließcheck:",
+      error
+    );
   }
+
+  // ===================================================
+  // SANKTIONSCHECK
+  // ===================================================
 
   try {
     await checkOverdueSanctions(client);
   } catch (error) {
-    console.error("❌ Fehler beim initialen Sanktionscheck:", error);
+    console.error(
+      "❌ Initialer Sanktionscheck:",
+      error
+    );
   }
 
-  console.log("✅ Initiale Bot-Prüfungen abgeschlossen.");
-
-  // WICHTIG:
-  // Beim Bot-Start werden bewusst KEINE Aufstellungen und KEINE Reminder nachträglich gesendet.
-  // Dadurch kommt nach einem Railway-Deploy / Bot-Neustart keine alte Aufstellungserinnerung mehr.
+  console.log(
+    "✅ Initiale CC-Bot-Prüfungen abgeschlossen."
+  );
 }
+
+// =====================================================
+// SCHEDULER STARTEN
+// =====================================================
 
 function startScheduler(client) {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
+    schedulerInterval = null;
   }
 
-  runInitialChecks(client).catch((error) => {
-    console.error("❌ Fehler bei initialen Prüfungen:", error);
+  // SOFORT beim Start prüfen:
+  // - Ist es nach 12 Uhr?
+  // - Existiert die heutige Aufstellung?
+  // - Falls nicht, erstellen.
+  void runSchedulerOnce(
+    client,
+    "start"
+  ).catch(error => {
+    console.error(
+      "❌ Sofortige Scheduler-Prüfung:",
+      error
+    );
   });
 
-  // Alle 60 Sekunden prüfen.
+  // Anschließend jede Minute nachprüfen.
   schedulerInterval = setInterval(() => {
-    runSchedulerOnce(client, "interval").catch((error) => {
-      console.error("❌ Scheduler-Intervallfehler:", error);
+    void runSchedulerOnce(
+      client,
+      "interval"
+    ).catch(error => {
+      console.error(
+        "❌ Scheduler-Intervall:",
+        error
+      );
     });
   }, 60 * 1000);
 
-  console.log("✅ Scheduler gestartet.");
+  // Alte Abmeldungen separat prüfen.
+  void runInitialChecks(client).catch(error => {
+    console.error(
+      "❌ Initiale CC-Prüfungen:",
+      error
+    );
+  });
+
+  console.log(
+    "✅ CC-Scheduler gestartet."
+  );
+
+  console.log(
+    "✅ Tägliche Aufstellung: Prüfung ab 12:00 Uhr."
+  );
+
+  console.log(
+    "✅ Verpasste Aufstellungen werden beim Botstart nachgeholt."
+  );
 }
+
+// =====================================================
+// SCHEDULER STOPPEN
+// =====================================================
 
 function stopScheduler() {
-  if (!schedulerInterval) return;
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+    schedulerInterval = null;
+  }
 
-  clearInterval(schedulerInterval);
-  schedulerInterval = null;
-
-  console.log("🛑 Scheduler gestoppt.");
+  console.log(
+    "🛑 CC-Scheduler gestoppt."
+  );
 }
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   startScheduler,
