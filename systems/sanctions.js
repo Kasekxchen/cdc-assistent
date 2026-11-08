@@ -22,222 +22,335 @@ const { sendToChannel, safeReply } = require("../utils/discord");
 
 const leaderPanelCommand = new SlashCommandBuilder()
   .setName("leaderpanel")
-  .setDescription("Sendet das SMV-Leaderpanel.");
+  .setDescription("Sendet das CC-Leaderpanel.");
 
 // =====================================================
-// DRAFTS
+// ENTWÜRFE
 // =====================================================
 
 const sanctionDrafts = new Map();
 
 // =====================================================
-// SANKTIONSKATALOG
+// SANKTIONSKATEGORIEN
 // =====================================================
 
 const SANCTION_CATEGORIES = [
   {
     id: "allgemein",
-    label: "Allgemeine Verstöße",
-    emoji: "💵",
+    label: "Allgemeine Pflichten",
+    emoji: "📋",
   },
   {
-    id: "intern",
-    label: "Internes Verhalten",
-    emoji: "👑",
-  },
-  {
-    id: "aufstellung",
-    label: "Aufstellung & Anwesenheit",
-    emoji: "👥",
-  },
-  {
-    id: "extern",
-    label: "Externes Verhalten",
+    id: "familie",
+    label: "Verhalten innerhalb der Familie",
     emoji: "🤝",
   },
   {
-    id: "kommunikation",
-    label: "Kommunikation",
+    id: "schwer",
+    label: "Gewalt und schwerwiegende Verstöße",
+    emoji: "⚠️",
+  },
+  {
+    id: "funk",
+    label: "Funk und Kommunikation",
     emoji: "📻",
   },
   {
-    id: "hausordnung",
-    label: "Hausordnung",
-    emoji: "🏠",
+    id: "fahrzeuge",
+    label: "Kolonne und Fahrzeuge",
+    emoji: "🚗",
+  },
+  {
+    id: "zahlungen",
+    label: "Zahlungen",
+    emoji: "💰",
   },
 ];
+
+// =====================================================
+// SANKTIONSKATALOG
+// =====================================================
 
 const SANCTION_CATALOG = [
-  // I. ALLGEMEINE VERSTÖSSE
+  // ALLGEMEINE PFLICHTEN
   {
-    id: "weitergabe_infos",
+    id: "p1",
     categoryId: "allgemein",
-    label: "Weitergabe familieninterner Informationen oder Ausrüstung",
-    note: "Schwere abhängig von Bedeutung/Gewicht der Informationen",
+    label: "§1 Nicht im Funk sein, ohne Abmeldung",
+    amount: 140000,
   },
   {
-    id: "wochenabgabe_nicht_bezahlt",
+    id: "p2",
     categoryId: "allgemein",
-    label: "Wochenabgabe nicht bezahlt",
-    note: "Nachzahlung berücksichtigen",
+    label: "§2 Nichttragen der Familienkleidung während Familienaktionen",
+    amount: 350000,
   },
   {
-    id: "sanktion_nicht_bezahlt",
+    id: "p3",
     categoryId: "allgemein",
-    label: "Sanktion nicht bezahlt",
-    note: "Nachzahlung der Sanktion berücksichtigen",
+    label: "§3 Bei einer Aufstellung angemeldet, aber nicht anwesend",
+    amount: 100000,
   },
   {
-    id: "kein_mindestbestand",
+    id: "p4",
     categoryId: "allgemein",
-    label: "Kein Mindestbestand",
+    label: "§4 Nichteinhaltung der Funkdisziplin",
+    amount: 140000,
   },
   {
-    id: "fahrzeuge_abgeschlossen",
+    id: "p5",
     categoryId: "allgemein",
-    label: "Familienfahrzeuge bei Familienaktionen oder auf Route abgeschlossen",
+    label: "§5 Unangemessenes Verhalten in der Öffentlichkeit, das die Familie gefährdet",
+    amount: 350000,
   },
   {
-    id: "langwaffe_verloren",
+    id: "p6",
     categoryId: "allgemein",
-    label: "Verlust einer Langwaffe durch Eigenverschulden",
-    note: "Wert der Waffe berücksichtigen",
+    label: "§6 Unangemeldete Teilnahme an Aktivitäten, die die Familie gefährden",
+    amount: 420000,
+  },
+  {
+    id: "p7",
+    categoryId: "allgemein",
+    label: "§7 Beleidigungen jeglicher Art",
+    amount: 150000,
+  },
+  {
+    id: "p8",
+    categoryId: "allgemein",
+    label: "§8 Fehlende Grundausstattung",
+    amount: 170000,
+  },
+  {
+    id: "p9",
+    categoryId: "allgemein",
+    label: "§9 Nach einem Up-Rank fragen",
+    amount: 300000,
+    special: "Downrank",
   },
 
-  // II. INTERNES VERHALTEN
+  // VERHALTEN INNERHALB DER FAMILIE
   {
-    id: "anordnungen_ignoriert",
-    categoryId: "intern",
-    label: "Ignorieren von Anordnungen der Leaderschaft oder Hochrangigen",
-    note: "Bis BLOODOUT möglich",
+    id: "p10",
+    categoryId: "familie",
+    label: "§10 Zinken von Familienmitgliedern",
+    amount: 200000,
   },
   {
-    id: "respektlos_leaderschaft",
-    categoryId: "intern",
-    label: "Respektloses Verhalten gegenüber Leaderschaft / Höherrangigen",
+    id: "p11",
+    categoryId: "familie",
+    label: "§11 Nicht auf die Aufstellung reagieren",
+    amount: 100000,
   },
   {
-    id: "beleidigung_intern",
-    categoryId: "intern",
-    label: "Beleidigungen innerhalb der Familie, die zu weit gehen",
+    id: "p12",
+    categoryId: "familie",
+    label: "§12 Eine Waffe nicht zurückbringen",
+    amount: 700000,
   },
   {
-    id: "nicht_aufhoeren",
-    categoryId: "intern",
-    label: "Trotz mehrfacher Aufforderung nicht aufhören",
+    id: "p13",
+    categoryId: "familie",
+    label: "§13 Missbrauch von Familiengeldern für persönliche Zwecke",
+    amount: 700000,
   },
   {
-    id: "provokation_ragebaiting",
-    categoryId: "intern",
-    label: "Starke Provokation und Rage-Baiting",
+    id: "p14",
+    categoryId: "familie",
+    label: "§14 Respektlosigkeit innerhalb der Familie oder gegenüber der Leaderschaft",
+    amount: 350000,
   },
   {
-    id: "familie_laecherlich",
-    categoryId: "intern",
-    label: "Die Familie lächerlich dastehen lassen",
-    note: "BLOODOUT möglich",
+    id: "p15",
+    categoryId: "familie",
+    label: "§15 Nichteinhaltung von Befehlen während Missionen",
+    amount: 280000,
   },
   {
-    id: "schiessen_familienmitglied",
-    categoryId: "intern",
-    label: "Schießen auf Familienmitglieder",
+    id: "p16",
+    categoryId: "familie",
+    label: "§16 Streitigkeiten oder Unruhe innerhalb der Familie stiften",
+    amount: 280000,
   },
   {
-    id: "toeten_familienmitglied",
-    categoryId: "intern",
-    label: "Töten eines Familienmitglieds",
-    note: "BLOODOUT möglich",
-  },
-
-  // III. AUFSTELLUNG & ANWESENHEIT
-  {
-    id: "nicht_abmelden",
-    categoryId: "aufstellung",
-    label: "Nicht-Abmelden bei einer Aufstellung",
+    id: "p17",
+    categoryId: "familie",
+    label: "§17 Unangemessenes Benehmen auf dem Anwesen",
+    amount: 150000,
   },
   {
-    id: "nicht_rechtzeitig_aufstellung",
-    categoryId: "aufstellung",
-    label: "Nicht rechtzeitig zur Aufstellung am Aufstellungsort sein",
-  },
-
-  // IV. EXTERNES VERHALTEN
-  {
-    id: "beleidigung_extern",
-    categoryId: "extern",
-    label: "Beleidigungen außerhalb der Familie, die zu weit gehen",
-    note: "Entschuldigung bei der betroffenen Familie möglich",
+    id: "p18",
+    categoryId: "familie",
+    label: "§18 Unnötiges Schlagen oder Überfahren von Familienmitgliedern",
+    amount: 200000,
   },
   {
-    id: "unangemessenes_benehmen",
-    categoryId: "extern",
-    label: "Unangebrachtes Benehmen bei wichtigen Meetings / Besprechungen",
+    id: "p19",
+    categoryId: "familie",
+    label: "§19 Fehlende Disziplin bei Aufstellungen",
+    amount: 300000,
   },
   {
-    id: "stress_extern",
-    categoryId: "extern",
-    label: "Stress außerhalb der Familie provozieren",
-    note: "Bis BLOODOUT möglich",
+    id: "p20",
+    categoryId: "familie",
+    label: "§20 Respektloses Verhalten gegenüber anderen Familien oder Fremden",
+    amount: 250000,
   },
   {
-    id: "zivi_action",
-    categoryId: "extern",
-    label: "Zivi-Action fällt auf die Familie zurück",
-    note: "Bis BLOODOUT möglich",
+    id: "p21",
+    categoryId: "familie",
+    label: "§21 Missachtung eines Befehls der Leaderschaft",
+    amount: 750000,
   },
 
-  // V. KOMMUNIKATION
+  // GEWALT UND SCHWERWIEGENDE VERSTÖSSE
   {
-    id: "funkpflicht_missachtet",
-    categoryId: "kommunikation",
-    label: "Funkpflicht missachtet",
+    id: "p22",
+    categoryId: "schwer",
+    label: "§22 Schießen auf Familienmitglieder",
+    amount: 500000,
   },
   {
-    id: "funkdisziplin_missachtet",
-    categoryId: "kommunikation",
-    label: "Funkdisziplin missachtet",
+    id: "p23",
+    categoryId: "schwer",
+    label: "§23 Grundloses Töten oder Bewusstlosschießen eines Familienmitglieds",
+    amount: 0,
+    special: "Bloodout",
   },
   {
-    id: "kein_gps_tracker",
-    categoryId: "kommunikation",
-    label: "Keinen GPS-Tracker bei sich tragen",
+    id: "p24",
+    categoryId: "schwer",
+    label: "§24 Verkauf oder Preisgabe der Familie",
+    amount: 0,
+    special: "Bloodout",
+  },
+  {
+    id: "p25",
+    categoryId: "schwer",
+    label: "§25 Unnötiges Schießen auf dem Anwesen",
+    amount: 150000,
   },
 
-  // VI. HAUSORDNUNG
+  // FUNK UND KOMMUNIKATION
   {
-    id: "tueren_tore_nicht_abgeschlossen",
-    categoryId: "hausordnung",
-    label: "Nicht abschließen der Türen / Tore",
+    id: "p26",
+    categoryId: "funk",
+    label: "§26 Privatgespräche im Funk",
+    amount: 100000,
   },
   {
-    id: "zu_schnell_anwesen",
-    categoryId: "hausordnung",
-    label: "Zu schnelles Fahren im Anwesen (> 100)",
+    id: "p27",
+    categoryId: "funk",
+    label: "§27 Alleingänge ohne Rücksprache bei Operationen",
+    amount: 350000,
+  },
+  {
+    id: "p28",
+    categoryId: "funk",
+    label: "§28 Versagen in kritischen Situationen aufgrund von Fahrlässigkeit",
+    amount: 280000,
+  },
+  {
+    id: "p29",
+    categoryId: "funk",
+    label: "§29 Nichtbefolgen von Einsatzbefehlen",
+    amount: 280000,
+  },
+  {
+    id: "p30",
+    categoryId: "funk",
+    label: "§30 Feindkontakte während einer Operation nicht melden",
+    amount: 140000,
+  },
+  {
+    id: "p31",
+    categoryId: "funk",
+    label: "§31 Verlassen des Einsatzortes ohne Erlaubnis",
+    amount: 140000,
+  },
+  {
+    id: "p32",
+    categoryId: "funk",
+    label: "§32 Nicht auf einen Rapidoruf im Funk reagieren",
+    amount: 210000,
+  },
+  {
+    id: "p33",
+    categoryId: "funk",
+    label: "§33 Missbrauch des Rapidorufs",
+    amount: 700000,
+  },
+  {
+    id: "p34",
+    categoryId: "funk",
+    label: "§34 Einsammeln von Gefechtswaffen oder Beständen ohne Rückgabe",
+    amount: 0,
+    special: "Bloodout",
+  },
+  {
+    id: "p35",
+    categoryId: "funk",
+    label: "§35 Nicht auf den Funker hören",
+    amount: 500000,
+  },
+
+  // KOLONNE UND FAHRZEUGE
+  {
+    id: "p36",
+    categoryId: "fahrzeuge",
+    label: "§36 Absichtliches Pitten innerhalb der Kolonne",
+    amount: 150000,
+  },
+  {
+    id: "p37",
+    categoryId: "fahrzeuge",
+    label: "§37 Auf die Reifen von Familienmitgliedern schießen",
+    amount: 200000,
+  },
+  {
+    id: "p38",
+    categoryId: "fahrzeuge",
+    label: "§38 Kolonne nicht rechtzeitig aufgestellt",
+    amount: 150000,
+  },
+
+  // ZAHLUNGEN
+  {
+    id: "p39",
+    categoryId: "zahlungen",
+    label: "§39 Sanktionen nicht rechtzeitig und ohne triftigen Grund beglichen",
+    percent: 30,
   },
 ];
 
 // =====================================================
-// HELPER
+// HILFSFUNKTIONEN
 // =====================================================
 
-function formatMetal(amount) {
-  return `${Number(amount || 0).toLocaleString("de-DE")}x Metall`;
+function formatMoney(amount) {
+  return `${Number(amount || 0).toLocaleString("de-DE")}$`;
 }
 
-function parseMetal(input) {
+function parseMoney(input) {
   const cleaned = String(input || "")
-    .replace(/\./g, "")
-    .replace(/,/g, "")
-    .replace(/[^\d]/g, "");
+    .trim()
+    .replace(/[.$\s]/g, "");
+
+  if (!/^\d+$/.test(cleaned)) return null;
 
   const amount = Number(cleaned);
 
-  if (!Number.isInteger(amount) || amount < 0) return null;
+  if (!Number.isSafeInteger(amount) || amount < 0) {
+    return null;
+  }
+
   return amount;
 }
 
 function createShortSanctionId() {
-  return `smv${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return `cc${Date.now().toString(36)}${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
 }
 
 function getUnixTimestamp(ms) {
@@ -268,20 +381,34 @@ function getCatalogItem(itemId) {
 }
 
 function getCategory(categoryId) {
-  return SANCTION_CATEGORIES.find((category) => category.id === categoryId) || null;
+  return SANCTION_CATEGORIES.find(
+    (category) => category.id === categoryId
+  ) || null;
 }
 
 function getCatalogItemsByCategory(categoryId) {
-  return SANCTION_CATALOG.filter((item) => item.categoryId === categoryId);
+  return SANCTION_CATALOG.filter(
+    (item) => item.categoryId === categoryId
+  );
 }
 
 function getMemberDisplayName(member, user) {
-  return member?.displayName || user?.globalName || user?.username || "Unbekannt";
+  return (
+    member?.displayName ||
+    user?.globalName ||
+    user?.username ||
+    "Unbekannt"
+  );
 }
 
 function hasAnyRole(member, roleIds = []) {
-  if (!member || !member.roles || !member.roles.cache) return false;
-  return roleIds.some((roleId) => member.roles.cache.has(roleId));
+  if (!member || !member.roles || !member.roles.cache) {
+    return false;
+  }
+
+  return roleIds.some((roleId) =>
+    member.roles.cache.has(roleId)
+  );
 }
 
 function hasSanctionPermission(member) {
@@ -314,46 +441,82 @@ function createNewDraft(userId) {
   return draft;
 }
 
+function getItemAmount(item) {
+  return Number(item.amount ?? item.metalAmount ?? 0) || 0;
+}
+
 function getDraftTotal(draft) {
-  return (draft?.items || []).reduce((sum, item) => sum + Number(item.metalAmount || 0), 0);
+  return (draft?.items || []).reduce(
+    (sum, item) => sum + getItemAmount(item),
+    0
+  );
 }
 
-function getSanctionTotalMetal(sanction) {
-  if (typeof sanction.totalMetal === "number") return sanction.totalMetal;
+function getSanctionTotalAmount(sanction) {
+  if (
+    sanction.totalAmount != null &&
+    Number.isFinite(Number(sanction.totalAmount))
+  ) {
+    return Number(sanction.totalAmount);
+  }
 
-  return (sanction?.items || []).reduce((sum, item) => sum + Number(item.metalAmount || 0), 0);
+  return (sanction.items || []).reduce(
+    (sum, item) => sum + getItemAmount(item),
+    0
+  );
 }
+
+// =====================================================
+// SANKTIONEN FORMATIEREN
+// =====================================================
 
 function formatDraftItems(items = []) {
   if (!items.length) {
-    return "┖ Noch keine Sanktion ausgewählt";
+    return "┖ Noch kein Vergehen ausgewählt";
   }
 
   return items
-    .map((item, index) => {
-      const number = index + 1;
-      const noteText = item.note ? `\n   └ Zusatz: ${item.note}` : "";
+    .map((item) => {
+      const amount = getItemAmount(item);
+
+      const extra =
+        item.special ||
+        (item.catalogId === "p39" ? null : item.note);
 
       return [
-        `**${number}. ${item.reason}**`,
-        `   └ ${formatMetal(item.metalAmount)}${noteText}`,
-      ].join("\n");
+        `**${item.reason}**`,
+        amount > 0
+          ? `┖ ${formatMoney(amount)}`
+          : "┖ Keine Geldstrafe",
+        extra ? `┖ Sonderstrafe: ${extra}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n")
     .slice(0, 1000);
 }
 
 function formatFinalSanctionItems(items = []) {
-  if (!items.length) return "Keine Vergehen eingetragen";
+  if (!items.length) {
+    return "Keine Vergehen eingetragen";
+  }
 
   return items
     .map((item) => {
-      const noteText = item.note ? `\n┖ Zusatz: ${item.note}` : "";
+      const amount = getItemAmount(item);
 
       return [
         `**${item.reason}**`,
-        `┖ ${formatMetal(item.metalAmount)}${noteText}`,
-      ].join("\n");
+        amount > 0
+          ? `┖ ${formatMoney(amount)}`
+          : "┖ Keine Geldstrafe",
+        item.catalogId === "p39" && item.note
+          ? `┖ ${item.note}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n\n")
     .slice(0, 1024);
@@ -361,12 +524,15 @@ function formatFinalSanctionItems(items = []) {
 
 function getSpecialPunishments(items = []) {
   const notes = items
-    .map((item) => item.note)
+    .map((item) =>
+      item.special ||
+      (item.catalogId === "p39" ? null : item.note)
+    )
     .filter(Boolean);
 
-  if (!notes.length) return "Keine";
-
-  return notes.join("\n").slice(0, 1024);
+  return notes.length
+    ? [...new Set(notes)].join("\n").slice(0, 1024)
+    : "Keine";
 }
 
 // =====================================================
@@ -380,7 +546,7 @@ function createLeaderPanelEmbed() {
     .setDescription(
       [
         "━━━━━━━━━━━━━━━━━━━━",
-        "Sanktionen und Wochenabgaben verwalten.",
+        "Sanktionen verwalten.",
         "━━━━━━━━━━━━━━━━━━━━",
       ].join("\n")
     )
@@ -395,13 +561,7 @@ function createLeaderPanelButtons() {
       .setCustomId("leader_create_sanction")
       .setLabel("Sanktion")
       .setEmoji("⚠️")
-      .setStyle(ButtonStyle.Danger),
-
-    new ButtonBuilder()
-      .setCustomId("leader_weekly_manage")
-      .setLabel("Wochenabgabe")
-      .setEmoji("💸")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -413,7 +573,8 @@ async function sendLeaderPanel(client, interaction) {
     });
   }
 
-  const channelId = CONFIG.leaderPanelChannelId || CONFIG.sanctionChannelId;
+  const channelId =
+    CONFIG.leaderPanelChannelId || CONFIG.sanctionChannelId;
 
   const message = await sendToChannel(client, channelId, {
     embeds: [createLeaderPanelEmbed()],
@@ -422,7 +583,7 @@ async function sendLeaderPanel(client, interaction) {
 
   if (!message) {
     return safeReply(interaction, {
-      content: "❌ Leaderpanel konnte nicht gesendet werden. Bitte prüfe Channel-ID und Bot-Rechte.",
+      content: "❌ Leaderpanel konnte nicht gesendet werden.",
       ephemeral: true,
     });
   }
@@ -434,7 +595,7 @@ async function sendLeaderPanel(client, interaction) {
 }
 
 // =====================================================
-// DRAFT UI
+// SANKTIONSENTWURF
 // =====================================================
 
 function createTargetSelectRow() {
@@ -452,8 +613,6 @@ function createDraftEmbed(draft) {
     ? `<@${draft.targetId}>`
     : "Noch nicht ausgewählt";
 
-  const totalMetal = getDraftTotal(draft);
-
   return new EmbedBuilder()
     .setColor(CONFIG.warningColor)
     .setTitle("⚠️ • SANKTIONSENTWURF")
@@ -469,8 +628,8 @@ function createDraftEmbed(draft) {
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "",
-        "🪙 **GESAMTABGABE**",
-        `┖ **${formatMetal(totalMetal)}**`,
+        "💵 **GESAMTABGABE**",
+        `┖ **${formatMoney(getDraftTotal(draft))}**`,
         "",
         "━━━━━━━━━━━━━━━━━━━━",
       ].join("\n")
@@ -516,6 +675,10 @@ function createDraftButtons(draft) {
   ];
 }
 
+// =====================================================
+// KATEGORIEAUSWAHL
+// =====================================================
+
 function createCategorySelectRow() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -533,6 +696,22 @@ function createCategorySelectRow() {
   );
 }
 
+function createCategorySelectionEmbed() {
+  return new EmbedBuilder()
+    .setColor(CONFIG.embedColor)
+    .setTitle("📚 • SANKTIONSKATALOG")
+    .setDescription(
+      "Wähle eine Kategorie aus, um die dazugehörigen Vergehen anzuzeigen."
+    )
+    .setFooter({
+      text: `${CONFIG.shortName} • Kategorieauswahl`,
+    });
+}
+
+// =====================================================
+// VERGEHENSAUSWAHL
+// =====================================================
+
 function createOffenseSelectRow(categoryId) {
   const items = getCatalogItemsByCategory(categoryId).slice(0, 25);
   const category = getCategory(categoryId);
@@ -547,11 +726,53 @@ function createOffenseSelectRow(categoryId) {
         items.map((item) => ({
           label: item.label.slice(0, 100),
           value: item.id,
-          description: "Metall-Menge wird danach manuell eingetragen.",
+          description: item.percent
+            ? "30 % des ursprünglichen Betrags"
+            : item.special
+              ? item.amount > 0
+                ? `${formatMoney(item.amount)} + ${item.special}`
+                : item.special
+              : formatMoney(item.amount),
         }))
       )
   );
 }
+
+function createOffenseSelectionEmbed(categoryId) {
+  const category = getCategory(categoryId);
+
+  return new EmbedBuilder()
+    .setColor(CONFIG.embedColor)
+    .setTitle(`${category.emoji} • ${category.label}`)
+    .setDescription(
+      [
+        "Wähle das gewünschte Vergehen aus.",
+        "",
+        "Der Geldbetrag wird automatisch aus dem Sanktionskatalog übernommen.",
+      ].join("\n")
+    )
+    .setFooter({
+      text: `${CONFIG.shortName} • Sanktionsauswahl`,
+    });
+}
+
+// =====================================================
+// NEU: ZURÜCK ZUR KATEGORIEAUSWAHL
+// =====================================================
+
+function createBackToCategoriesRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("sanction_back_categories")
+      .setLabel("Zurück zu den Kategorien")
+      .setEmoji("↩️")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+// =====================================================
+// MODAL: EIGENE SANKTION
+// =====================================================
 
 function createCustomSanctionModal() {
   const modal = new ModalBuilder()
@@ -567,10 +788,10 @@ function createCustomSanctionModal() {
     .setMaxLength(100)
     .setRequired(true);
 
-  const metalInput = new TextInputBuilder()
-    .setCustomId("sanction_metal")
-    .setLabel("Metall-Menge")
-    .setPlaceholder("z. B. 500")
+  const amountInput = new TextInputBuilder()
+    .setCustomId("sanction_amount")
+    .setLabel("Geldbetrag ($)")
+    .setPlaceholder("z. B. 150000")
     .setStyle(TextInputStyle.Short)
     .setMinLength(1)
     .setMaxLength(15)
@@ -578,45 +799,15 @@ function createCustomSanctionModal() {
 
   const noteInput = new TextInputBuilder()
     .setCustomId("sanction_note")
-    .setLabel("Zusatz optional")
-    .setPlaceholder("z. B. BLOODOUT, Entschuldigung, leer lassen")
+    .setLabel("Sonderstrafe / Zusatz (optional)")
+    .setPlaceholder("z. B. Downrank oder Bloodout")
     .setStyle(TextInputStyle.Short)
     .setMaxLength(100)
     .setRequired(false);
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(reasonInput),
-    new ActionRowBuilder().addComponents(metalInput),
-    new ActionRowBuilder().addComponents(noteInput)
-  );
-
-  return modal;
-}
-
-function createMetalAmountModal(item) {
-  const modal = new ModalBuilder()
-    .setCustomId(`sanction_metal_modal_${item.id}`)
-    .setTitle("🪙 Metall-Menge festlegen");
-
-  const metalInput = new TextInputBuilder()
-    .setCustomId("sanction_metal")
-    .setLabel("Metall-Menge")
-    .setPlaceholder("z. B. 500")
-    .setStyle(TextInputStyle.Short)
-    .setMinLength(1)
-    .setMaxLength(15)
-    .setRequired(true);
-
-  const noteInput = new TextInputBuilder()
-    .setCustomId("sanction_note")
-    .setLabel("Zusatz optional")
-    .setPlaceholder(item.note || "z. B. BLOODOUT, Entschuldigung, leer lassen")
-    .setStyle(TextInputStyle.Short)
-    .setMaxLength(100)
-    .setRequired(false);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(metalInput),
+    new ActionRowBuilder().addComponents(amountInput),
     new ActionRowBuilder().addComponents(noteInput)
   );
 
@@ -624,7 +815,30 @@ function createMetalAmountModal(item) {
 }
 
 // =====================================================
-// SANKTION EMBED
+// MODAL: §39
+// =====================================================
+
+function createLatePaymentModal(item) {
+  const modal = new ModalBuilder()
+    .setCustomId(`sanction_percent_modal_${item.id}`)
+    .setTitle("§39 – 30 % Zusatzsanktion");
+
+  const baseInput = new TextInputBuilder()
+    .setCustomId("sanction_base_amount")
+    .setLabel("Ursprüngliche Sanktion in $")
+    .setPlaceholder("z. B. 100000")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(baseInput)
+  );
+
+  return modal;
+}
+
+// =====================================================
+// STATUS
 // =====================================================
 
 function getSanctionStatusText(sanction) {
@@ -641,23 +855,29 @@ function getSanctionStatusEmoji(sanction) {
   return "⏳";
 }
 
+// =====================================================
+// FERTIGES SANKTIONS-EMBED
+// =====================================================
+
 function createSanctionEmbed(sanction) {
   const statusText = getSanctionStatusText(sanction);
   const statusEmoji = getSanctionStatusEmoji(sanction);
-  const totalMetal = getSanctionTotalMetal(sanction);
+  const totalAmount = getSanctionTotalAmount(sanction);
 
   const color =
     sanction.status === "paid"
       ? CONFIG.successColor
       : sanction.status === "cancelled"
         ? CONFIG.dangerColor
-        : sanction.status === "overdue"
-          ? CONFIG.warningColor
-          : CONFIG.warningColor;
+        : CONFIG.warningColor;
 
   const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${statusEmoji === "⏳" ? "🚫" : statusEmoji} SANKTION ${statusEmoji === "⏳" ? "🚫" : statusEmoji}`)
+    .setTitle(
+      `${statusEmoji === "⏳" ? "🚫" : statusEmoji} SANKTION ${
+        statusEmoji === "⏳" ? "🚫" : statusEmoji
+      }`
+    )
     .addFields(
       {
         name: "Name",
@@ -670,8 +890,8 @@ function createSanctionEmbed(sanction) {
         inline: false,
       },
       {
-        name: "Zu Bezahlen",
-        value: `**${formatMetal(totalMetal)}**`,
+        name: "Zu bezahlen",
+        value: `**${formatMoney(totalAmount)}**`,
         inline: true,
       },
       {
@@ -723,7 +943,9 @@ function createSanctionEmbed(sanction) {
 }
 
 function createSanctionButtons(sanction) {
-  const isDone = sanction.status === "paid" || sanction.status === "cancelled";
+  const isDone =
+    sanction.status === "paid" ||
+    sanction.status === "cancelled";
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -743,7 +965,7 @@ function createSanctionButtons(sanction) {
 }
 
 // =====================================================
-// SANKTION POSTEN / UPDATEN
+// SANKTION POSTEN
 // =====================================================
 
 async function postSanction(client, interaction, draft) {
@@ -753,8 +975,7 @@ async function postSanction(client, interaction, draft) {
     targetName: draft.targetName,
     creatorId: draft.creatorId,
     items: draft.items,
-    totalMetal: getDraftTotal(draft),
-    totalAmount: 0,
+    totalAmount: getDraftTotal(draft),
     status: "open",
     createdAt: Date.now(),
     dueAt: getDueAt(),
@@ -766,18 +987,23 @@ async function postSanction(client, interaction, draft) {
     overdueNotified: false,
   };
 
-  const message = await sendToChannel(client, CONFIG.sanctionChannelId, {
-    content: `<@${sanction.targetId}>`,
-    embeds: [createSanctionEmbed(sanction)],
-    components: [createSanctionButtons(sanction)],
-    allowedMentions: {
-      users: [sanction.targetId],
-    },
-  });
+  const message = await sendToChannel(
+    client,
+    CONFIG.sanctionChannelId,
+    {
+      content: `<@${sanction.targetId}>`,
+      embeds: [createSanctionEmbed(sanction)],
+      components: [createSanctionButtons(sanction)],
+      allowedMentions: {
+        users: [sanction.targetId],
+      },
+    }
+  );
 
   if (!message) {
     return safeReply(interaction, {
-      content: "❌ Sanktion konnte nicht gesendet werden. Bitte prüfe Channel-ID und Bot-Rechte.",
+      content:
+        "❌ Sanktion konnte nicht gesendet werden. Bitte prüfe Channel-ID und Bot-Rechte.",
       ephemeral: true,
     });
   }
@@ -785,25 +1011,41 @@ async function postSanction(client, interaction, draft) {
   sanction.messageId = message.id;
 
   const data = loadData();
-  if (!data.sanctions) data.sanctions = {};
+
+  if (!data.sanctions) {
+    data.sanctions = {};
+  }
+
   data.sanctions[sanction.id] = sanction;
   saveData(data);
 
   sanctionDrafts.delete(interaction.user.id);
 
   return safeReply(interaction, {
-    content: `✅ Sanktion wurde in <#${CONFIG.sanctionChannelId}> erstellt.\n🪙 Gesamtabgabe: **${formatMetal(sanction.totalMetal)}**`,
+    content:
+      `✅ Sanktion wurde in <#${CONFIG.sanctionChannelId}> erstellt.\n` +
+      `💵 Gesamtabgabe: **${formatMoney(sanction.totalAmount)}**`,
     ephemeral: true,
   });
 }
 
+// =====================================================
+// SANKTION AKTUALISIEREN
+// =====================================================
+
 async function updateSanctionMessage(client, sanction) {
   if (!sanction.messageId) return null;
 
-  const channel = await client.channels.fetch(CONFIG.sanctionChannelId).catch(() => null);
+  const channel = await client.channels
+    .fetch(CONFIG.sanctionChannelId)
+    .catch(() => null);
+
   if (!channel || !channel.messages) return null;
 
-  const message = await channel.messages.fetch(sanction.messageId).catch(() => null);
+  const message = await channel.messages
+    .fetch(sanction.messageId)
+    .catch(() => null);
+
   if (!message) return null;
 
   await message.edit({
@@ -815,24 +1057,30 @@ async function updateSanctionMessage(client, sanction) {
 }
 
 // =====================================================
-// COMMANDS
+// SLASH COMMAND HANDLER
 // =====================================================
 
 async function handleLeaderPanelCommand(client, interaction) {
   if (!interaction.isChatInputCommand()) return false;
-  if (interaction.commandName !== "leaderpanel") return false;
+
+  if (interaction.commandName !== "leaderpanel") {
+    return false;
+  }
 
   await sendLeaderPanel(client, interaction);
   return true;
 }
 
 // =====================================================
-// INTERACTIONS: DRAFT
+// LEADERPANEL: SANKTION ERSTELLEN
 // =====================================================
 
 async function handleCreateSanctionButton(client, interaction) {
   if (!interaction.isButton()) return false;
-  if (interaction.customId !== "leader_create_sanction") return false;
+
+  if (interaction.customId !== "leader_create_sanction") {
+    return false;
+  }
 
   if (!hasSanctionPermission(interaction.member)) {
     await safeReply(interaction, {
@@ -853,9 +1101,16 @@ async function handleCreateSanctionButton(client, interaction) {
   return true;
 }
 
+// =====================================================
+// PERSON AUSWÄHLEN
+// =====================================================
+
 async function handleTargetSelect(client, interaction) {
   if (!interaction.isUserSelectMenu()) return false;
-  if (interaction.customId !== "sanction_target_select") return false;
+
+  if (interaction.customId !== "sanction_target_select") {
+    return false;
+  }
 
   if (!hasSanctionPermission(interaction.member)) {
     await safeReply(interaction, {
@@ -865,7 +1120,10 @@ async function handleTargetSelect(client, interaction) {
     return true;
   }
 
-  const draft = getDraft(interaction.user.id) || createNewDraft(interaction.user.id);
+  const draft =
+    getDraft(interaction.user.id) ||
+    createNewDraft(interaction.user.id);
+
   const targetId = interaction.values?.[0];
 
   if (!targetId) {
@@ -876,7 +1134,9 @@ async function handleTargetSelect(client, interaction) {
     return true;
   }
 
-  const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+  const member = await interaction.guild.members
+    .fetch(targetId)
+    .catch(() => null);
 
   draft.targetId = targetId;
   draft.targetName = member
@@ -892,6 +1152,10 @@ async function handleTargetSelect(client, interaction) {
 
   return true;
 }
+
+// =====================================================
+// BUTTONS IM SANKTIONSENTWURF
+// =====================================================
 
 async function handleDraftButtons(client, interaction) {
   if (!interaction.isButton()) return false;
@@ -919,7 +1183,8 @@ async function handleDraftButtons(client, interaction) {
 
   if (!draft) {
     await safeReply(interaction, {
-      content: "❌ Kein aktiver Sanktionsentwurf gefunden. Bitte starte erneut über das Leaderpanel.",
+      content:
+        "❌ Kein aktiver Sanktionsentwurf gefunden. Bitte starte erneut über das Leaderpanel.",
       ephemeral: true,
     });
     return true;
@@ -939,12 +1204,7 @@ async function handleDraftButtons(client, interaction) {
 
   if (customId === "sanction_add_catalog") {
     await interaction.update({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(CONFIG.embedColor)
-          .setTitle("📚 • Sanktionskatalog")
-          .setDescription("Wähle eine Kategorie aus."),
-      ],
+      embeds: [createCategorySelectionEmbed()],
       components: [createCategorySelectRow()],
     });
 
@@ -959,7 +1219,8 @@ async function handleDraftButtons(client, interaction) {
   if (customId === "sanction_finish") {
     if (!draft.targetId || !draft.items.length) {
       await safeReply(interaction, {
-        content: "❌ Bitte wähle zuerst eine Person und mindestens eine Sanktion aus.",
+        content:
+          "❌ Bitte wähle zuerst eine Person und mindestens eine Sanktion aus.",
         ephemeral: true,
       });
       return true;
@@ -972,13 +1233,30 @@ async function handleDraftButtons(client, interaction) {
   return false;
 }
 
+// =====================================================
+// KATEGORIE AUSWÄHLEN
+// =====================================================
+
 async function handleCategorySelect(client, interaction) {
   if (!interaction.isStringSelectMenu()) return false;
-  if (interaction.customId !== "sanction_category_select") return false;
+
+  if (interaction.customId !== "sanction_category_select") {
+    return false;
+  }
 
   if (!hasSanctionPermission(interaction.member)) {
     await safeReply(interaction, {
       content: "❌ Du hast keine Berechtigung, Sanktionen zu erstellen.",
+      ephemeral: true,
+    });
+    return true;
+  }
+
+  const draft = getDraft(interaction.user.id);
+
+  if (!draft?.targetId) {
+    await safeReply(interaction, {
+      content: "❌ Kein gültiger Sanktionsentwurf vorhanden.",
       ephemeral: true,
     });
     return true;
@@ -996,21 +1274,67 @@ async function handleCategorySelect(client, interaction) {
   }
 
   await interaction.update({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(CONFIG.embedColor)
-        .setTitle(`${category.emoji} • ${category.label}`)
-        .setDescription("Wähle das Vergehen aus. Die Metall-Menge wird danach manuell eingetragen."),
+    embeds: [createOffenseSelectionEmbed(categoryId)],
+    components: [
+      createOffenseSelectRow(categoryId),
+      createBackToCategoriesRow(),
     ],
-    components: [createOffenseSelectRow(categoryId)],
   });
 
   return true;
 }
 
+// =====================================================
+// NEU: ZURÜCK ZU DEN KATEGORIEN
+// =====================================================
+
+async function handleBackToCategoriesButton(client, interaction) {
+  if (!interaction.isButton()) return false;
+
+  if (interaction.customId !== "sanction_back_categories") {
+    return false;
+  }
+
+  if (!hasSanctionPermission(interaction.member)) {
+    await safeReply(interaction, {
+      content: "❌ Du hast keine Berechtigung, Sanktionen zu erstellen.",
+      ephemeral: true,
+    });
+    return true;
+  }
+
+  const draft = getDraft(interaction.user.id);
+
+  if (!draft?.targetId) {
+    await safeReply(interaction, {
+      content:
+        "❌ Kein aktiver Sanktionsentwurf gefunden. Bitte starte erneut über das Leaderpanel.",
+      ephemeral: true,
+    });
+    return true;
+  }
+
+  // Der vorhandene Entwurf wird NICHT gelöscht.
+  // Nur die Discord-Auswahl wird zurückgesetzt.
+
+  await interaction.update({
+    embeds: [createCategorySelectionEmbed()],
+    components: [createCategorySelectRow()],
+  });
+
+  return true;
+}
+
+// =====================================================
+// VERGEHEN AUSWÄHLEN
+// =====================================================
+
 async function handleOffenseSelect(client, interaction) {
   if (!interaction.isStringSelectMenu()) return false;
-  if (!interaction.customId.startsWith("sanction_offense_select_")) return false;
+
+  if (!interaction.customId.startsWith("sanction_offense_select_")) {
+    return false;
+  }
 
   if (!hasSanctionPermission(interaction.member)) {
     await safeReply(interaction, {
@@ -1031,12 +1355,52 @@ async function handleOffenseSelect(client, interaction) {
     return true;
   }
 
-  await interaction.showModal(createMetalAmountModal(catalogItem));
+  const draft = getDraft(interaction.user.id);
+
+  if (!draft?.targetId) {
+    await safeReply(interaction, {
+      content:
+        "❌ Bitte starte zunächst einen Sanktionsentwurf und wähle eine Person aus.",
+      ephemeral: true,
+    });
+    return true;
+  }
+
+  // §39 benötigt den ursprünglichen Geldbetrag.
+
+  if (catalogItem.percent) {
+    await interaction.showModal(
+      createLatePaymentModal(catalogItem)
+    );
+    return true;
+  }
+
+  draft.items.push({
+    reason: catalogItem.label,
+    amount: catalogItem.amount,
+    special: catalogItem.special || null,
+    note: null,
+    catalogId: catalogItem.id,
+  });
+
+  sanctionDrafts.set(interaction.user.id, draft);
+
+  await interaction.update({
+    embeds: [createDraftEmbed(draft)],
+    components: createDraftButtons(draft),
+  });
+
   return true;
 }
 
+// =====================================================
+// MODALS VERARBEITEN
+// =====================================================
+
 async function handleDraftModals(client, interaction) {
   if (!interaction.isModalSubmit()) return false;
+
+  // EIGENE SANKTION
 
   if (interaction.customId === "sanction_custom_modal") {
     if (!hasSanctionPermission(interaction.member)) {
@@ -1049,21 +1413,31 @@ async function handleDraftModals(client, interaction) {
 
     const draft = getDraft(interaction.user.id);
 
-    if (!draft) {
+    if (!draft?.targetId) {
       await safeReply(interaction, {
-        content: "❌ Kein aktiver Sanktionsentwurf gefunden. Bitte starte erneut über das Leaderpanel.",
+        content: "❌ Kein gültiger Sanktionsentwurf gefunden.",
         ephemeral: true,
       });
       return true;
     }
 
-    const reason = cleanText(interaction.fields.getTextInputValue("sanction_reason"));
-    const metalAmount = parseMetal(interaction.fields.getTextInputValue("sanction_metal"));
-    const note = cleanText(interaction.fields.getTextInputValue("sanction_note"), "");
+    const reason = cleanText(
+      interaction.fields.getTextInputValue("sanction_reason")
+    );
 
-    if (!metalAmount || metalAmount <= 0) {
+    const amount = parseMoney(
+      interaction.fields.getTextInputValue("sanction_amount")
+    );
+
+    const note = cleanText(
+      interaction.fields.getTextInputValue("sanction_note"),
+      ""
+    );
+
+    if (amount === null || (amount === 0 && !note)) {
       await safeReply(interaction, {
-        content: "❌ Bitte gib eine gültige Metall-Menge ein.",
+        content:
+          "❌ Bitte einen gültigen Dollarbetrag eingeben. Bei einer reinen Sonderstrafe ist 0 möglich.",
         ephemeral: true,
       });
       return true;
@@ -1071,9 +1445,9 @@ async function handleDraftModals(client, interaction) {
 
     draft.items.push({
       reason,
-      metalAmount,
-      amount: 0,
-      note: note || null,
+      amount,
+      note: null,
+      special: note || null,
       catalogId: null,
     });
 
@@ -1088,33 +1462,41 @@ async function handleDraftModals(client, interaction) {
     return true;
   }
 
-  if (interaction.customId.startsWith("sanction_metal_modal_")) {
+  // §39 – 30 % ZUSATZSANKTION
+
+  if (interaction.customId.startsWith("sanction_percent_modal_")) {
     if (!hasSanctionPermission(interaction.member)) {
       await safeReply(interaction, {
-        content: "❌ Du hast keine Berechtigung, Sanktionen zu erstellen.",
+        content: "❌ Keine Berechtigung.",
         ephemeral: true,
       });
       return true;
     }
 
-    const itemId = interaction.customId.replace("sanction_metal_modal_", "");
+    const itemId = interaction.customId.replace(
+      "sanction_percent_modal_",
+      ""
+    );
+
     const catalogItem = getCatalogItem(itemId);
     const draft = getDraft(interaction.user.id);
 
-    if (!draft || !catalogItem) {
+    if (!catalogItem?.percent || !draft?.targetId) {
       await safeReply(interaction, {
-        content: "❌ Entwurf oder Katalogeintrag wurde nicht gefunden.",
+        content: "❌ Kein gültiger Entwurf vorhanden.",
         ephemeral: true,
       });
       return true;
     }
 
-    const metalAmount = parseMetal(interaction.fields.getTextInputValue("sanction_metal"));
-    const noteInput = cleanText(interaction.fields.getTextInputValue("sanction_note"), "");
+    const baseAmount = parseMoney(
+      interaction.fields.getTextInputValue("sanction_base_amount")
+    );
 
-    if (!metalAmount || metalAmount <= 0) {
+    if (!baseAmount || baseAmount <= 0) {
       await safeReply(interaction, {
-        content: "❌ Bitte gib eine gültige Metall-Menge ein.",
+        content:
+          "❌ Bitte einen gültigen ursprünglichen Betrag eingeben.",
         ephemeral: true,
       });
       return true;
@@ -1122,9 +1504,11 @@ async function handleDraftModals(client, interaction) {
 
     draft.items.push({
       reason: catalogItem.label,
-      metalAmount,
-      amount: 0,
-      note: noteInput || catalogItem.note || null,
+      amount: Math.round(
+        (baseAmount * catalogItem.percent) / 100
+      ),
+      special: null,
+      note: `30 % von ${formatMoney(baseAmount)}`,
       catalogId: catalogItem.id,
     });
 
@@ -1143,7 +1527,7 @@ async function handleDraftModals(client, interaction) {
 }
 
 // =====================================================
-// INTERACTIONS: POSTED SANCTIONS
+// BEZAHLT / STORNIERT
 // =====================================================
 
 async function handlePostedSanctionButtons(client, interaction) {
@@ -1166,7 +1550,8 @@ async function handlePostedSanctionButtons(client, interaction) {
 
   if (!hasSanctionPermission(interaction.member)) {
     await safeReply(interaction, {
-      content: "❌ Du hast keine Berechtigung, diese Sanktion zu bearbeiten.",
+      content:
+        "❌ Du hast keine Berechtigung, diese Sanktion zu bearbeiten.",
       ephemeral: true,
     });
     return true;
@@ -1177,13 +1562,17 @@ async function handlePostedSanctionButtons(client, interaction) {
 
   if (!sanction) {
     await safeReply(interaction, {
-      content: "❌ Diese Sanktion wurde nicht im Speicher gefunden.",
+      content:
+        "❌ Diese Sanktion wurde nicht im Speicher gefunden.",
       ephemeral: true,
     });
     return true;
   }
 
-  if (sanction.status === "paid" || sanction.status === "cancelled") {
+  if (
+    sanction.status === "paid" ||
+    sanction.status === "cancelled"
+  ) {
     await safeReply(interaction, {
       content: "ℹ️ Diese Sanktion ist bereits abgeschlossen.",
       ephemeral: true,
@@ -1209,9 +1598,10 @@ async function handlePostedSanctionButtons(client, interaction) {
   await updateSanctionMessage(client, sanction);
 
   await safeReply(interaction, {
-    content: action === "paid"
-      ? "✅ Sanktion wurde als bezahlt markiert."
-      : "❌ Sanktion wurde storniert.",
+    content:
+      action === "paid"
+        ? "✅ Sanktion wurde als bezahlt markiert."
+        : "❌ Sanktion wurde storniert.",
     ephemeral: true,
   });
 
@@ -1219,11 +1609,12 @@ async function handlePostedSanctionButtons(client, interaction) {
 }
 
 // =====================================================
-// OVERDUE CHECK
+// AUTOMATISCHER FRIST-CHECK
 // =====================================================
 
 async function checkOverdueSanctions(client) {
   const data = loadData();
+
   if (!data.sanctions) return;
 
   let changed = false;
@@ -1231,10 +1622,17 @@ async function checkOverdueSanctions(client) {
   for (const [sanctionId, sanction] of Object.entries(data.sanctions)) {
     if (!sanction) continue;
     if (sanction.status !== "open") continue;
-    if (!sanction.dueAt || Date.now() < Number(sanction.dueAt)) continue;
+
+    if (
+      !sanction.dueAt ||
+      Date.now() < Number(sanction.dueAt)
+    ) {
+      continue;
+    }
 
     sanction.status = "overdue";
     sanction.overdueNotified = true;
+
     data.sanctions[sanctionId] = sanction;
     changed = true;
 
@@ -1247,7 +1645,11 @@ async function checkOverdueSanctions(client) {
         "⏰ **SANKTION ÜBERFÄLLIG**",
         "",
         `Die Sanktion **${sanction.id}** ist überfällig.`,
-        `Offene Abgabe: **${formatMetal(getSanctionTotalMetal(sanction))}**`,
+        `Offene Abgabe: **${formatMoney(
+          getSanctionTotalAmount(sanction)
+        )}**`,
+        "",
+        "Bei unbegründeter verspäteter Zahlung kann die Leaderschaft §39 (30 %) zusätzlich ausstellen.",
       ].join("\n"),
       allowedMentions: {
         users: [sanction.targetId],
@@ -1255,25 +1657,59 @@ async function checkOverdueSanctions(client) {
     });
   }
 
-  if (changed) saveData(data);
+  if (changed) {
+    saveData(data);
+  }
 }
 
 // =====================================================
-// MAIN HANDLER
+// HAUPT-HANDLER
 // =====================================================
 
 async function handleSanctionsInteraction(client, interaction) {
-  if (await handleLeaderPanelCommand(client, interaction)) return true;
-  if (await handleCreateSanctionButton(client, interaction)) return true;
-  if (await handleTargetSelect(client, interaction)) return true;
-  if (await handleDraftButtons(client, interaction)) return true;
-  if (await handleCategorySelect(client, interaction)) return true;
-  if (await handleOffenseSelect(client, interaction)) return true;
-  if (await handleDraftModals(client, interaction)) return true;
-  if (await handlePostedSanctionButtons(client, interaction)) return true;
+  if (await handleLeaderPanelCommand(client, interaction)) {
+    return true;
+  }
+
+  if (await handleCreateSanctionButton(client, interaction)) {
+    return true;
+  }
+
+  if (await handleTargetSelect(client, interaction)) {
+    return true;
+  }
+
+  if (await handleDraftButtons(client, interaction)) {
+    return true;
+  }
+
+  if (await handleCategorySelect(client, interaction)) {
+    return true;
+  }
+
+  // NEUER ZURÜCK-BUTTON
+  if (await handleBackToCategoriesButton(client, interaction)) {
+    return true;
+  }
+
+  if (await handleOffenseSelect(client, interaction)) {
+    return true;
+  }
+
+  if (await handleDraftModals(client, interaction)) {
+    return true;
+  }
+
+  if (await handlePostedSanctionButtons(client, interaction)) {
+    return true;
+  }
 
   return false;
 }
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   leaderPanelCommand,

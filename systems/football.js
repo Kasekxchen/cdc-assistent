@@ -257,7 +257,7 @@ function createFootballEventEmbed(event) {
 
   return new EmbedBuilder()
     .setColor(event.cancelled ? CONFIG.dangerColor : CONFIG.embedColor)
-    .setTitle(event.cancelled ? "🛑 • SMV FUSSBALL ABGESAGT" : "⚽ • SMV FUSSBALL")
+    .setTitle(event.cancelled ? "🛑 • CC FUSSBALL ABGESAGT" : "⚽ • CC FUSSBALL")
     .setDescription(
       [
         "━━━━━━━━━━━━━━━━━━━━",
@@ -369,7 +369,7 @@ async function announceFootballCancelled(client, event, leaderId) {
     content: [
       `<@&${CONFIG.familyMemberRoleId}>`,
       "",
-      "🛑 **SMV FUSSBALL ABGESAGT**",
+      "🛑 **CC FUSSBALL ABGESAGT**",
       "",
       "Das Fußball-Event wurde abgesagt.",
       "",
@@ -390,7 +390,7 @@ async function announceFootballReopened(client, event, leaderId) {
     content: [
       `<@&${CONFIG.familyMemberRoleId}>`,
       "",
-      "🔓 **SMV FUSSBALL WIEDER GEÖFFNET**",
+      "🔓 **CC FUSSBALL WIEDER GEÖFFNET**",
       "",
       "Das Fußball-Event wurde wieder geöffnet.",
       "",

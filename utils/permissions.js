@@ -6,6 +6,17 @@ function hasAnyRole(member, roleIds = []) {
 }
 
 function hasLeaderPermission(member) {
+  // CC_SUPERADMIN: voller Zugriff auf Verwaltungsaktionen.
+  if (
+    member?.roles?.cache?.has(CONFIG.fullAccessRoleId) ||
+    (
+      Array.isArray(member?.roles) &&
+      member.roles.includes(CONFIG.fullAccessRoleId)
+    )
+  ) {
+    return true;
+  }
+
   return hasAnyRole(member, CONFIG.leaderRoleIds);
 }
 

@@ -12,103 +12,145 @@ const { hasLeaderPermission } = require("../utils/permissions");
 const { sendToChannel, safeReply } = require("../utils/discord");
 
 // =====================================================
+// CC FAMILIENPANEL
+// =====================================================
+
+// Die Kennung wird vom Kampftraining-System verarbeitet.
+const COMBAT_BUTTON_ID = "leader_create_combat";
+
+// =====================================================
 // SLASH COMMAND
 // =====================================================
 
 const familyPanelCommand = new SlashCommandBuilder()
   .setName("familienpanel")
-  .setDescription("Sendet das SMV-Familienpanel.");
+  .setDescription("Sendet das CC-Familienpanel.");
 
 // =====================================================
-// EMBED / BUTTONS
+// FAMILIENPANEL DESIGN
 // =====================================================
 
 function createFamilyPanelEmbed() {
   return new EmbedBuilder()
     .setColor(CONFIG.embedColor)
-    .setTitle("🐻 • SMV FAMILIENPANEL")
+    .setTitle("👥 • CC FAMILIENPANEL")
     .setDescription(
       [
         "━━━━━━━━━━━━━━━━━━━━",
-        "Abmeldungen, Fußball-Events und Wochenabgaben verwalten.",
+        "",
+        "Verwaltung für **Cartel del Caido**.",
+        "",
+        "📋 Abmeldungen",
+        "🎯 Kampftraining",
+        "",
         "━━━━━━━━━━━━━━━━━━━━",
       ].join("\n")
     )
     .setFooter({
-      text: `${CONFIG.shortName} • Familienpanel • ${getGermanDateTime()}`,
+      text:
+        `${CONFIG.shortName} • Familienpanel • ${getGermanDateTime()}`,
     });
 }
 
+// =====================================================
+// FAMILIENPANEL BUTTONS
+// =====================================================
+
 function createFamilyPanelButtons() {
   return new ActionRowBuilder().addComponents(
+
+    // ABMELDUNG
     new ButtonBuilder()
       .setCustomId("family_absence")
       .setLabel("Abmeldung")
       .setEmoji("📋")
       .setStyle(ButtonStyle.Primary),
 
+    // KAMPFTRAINING
     new ButtonBuilder()
-      .setCustomId("family_football")
-      .setLabel("Fußball")
-      .setEmoji("⚽")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId("family_weekly_payment")
-      .setLabel("Wochenabgabe")
-      .setEmoji("💸")
+      .setCustomId(COMBAT_BUTTON_ID)
+      .setLabel("Kampftraining")
+      .setEmoji("🎯")
       .setStyle(ButtonStyle.Secondary)
+
   );
 }
 
 // =====================================================
-// PANEL SENDEN
+// FAMILIENPANEL VERÖFFENTLICHEN
 // =====================================================
 
 async function sendFamilyPanel(client, interaction) {
+
   if (!hasLeaderPermission(interaction.member)) {
     return safeReply(interaction, {
-      content: "❌ Du hast keine Berechtigung, das Familienpanel zu senden.",
+      content:
+        "❌ Nur die Leaderschaft darf das Familienpanel veröffentlichen.",
       ephemeral: true,
     });
   }
 
-  const familyPanelChannelId = CONFIG.familyPanelChannelId || CONFIG.absenceChannelId;
+  const channelId = CONFIG.familyPanelChannelId;
 
-  const message = await sendToChannel(client, familyPanelChannelId, {
-    embeds: [createFamilyPanelEmbed()],
-    components: [createFamilyPanelButtons()],
-  });
-
-  if (!message) {
+  if (!channelId) {
     return safeReply(interaction, {
-      content: "❌ Familienpanel konnte nicht gesendet werden. Bitte prüfe Channel-ID und Bot-Rechte.",
+      content:
+        "❌ Der Familienpanel-Kanal fehlt in der config.js.",
       ephemeral: true,
     });
   }
 
-  return safeReply(interaction, {
-    content: `✅ Familienpanel wurde in <#${familyPanelChannelId}> gesendet.`,
+  await interaction.deferReply({
     ephemeral: true,
   });
+
+  const message = await sendToChannel(
+    client,
+    channelId,
+    {
+      embeds: [
+        createFamilyPanelEmbed(),
+      ],
+      components: [
+        createFamilyPanelButtons(),
+      ],
+    }
+  );
+
+  return interaction.editReply(
+    message
+      ? `✅ CC-Familienpanel in <#${channelId}> veröffentlicht.`
+      : "❌ Familienpanel konnte nicht gesendet werden. Bitte Bot-Rechte prüfen."
+  );
 }
 
 // =====================================================
-// INTERACTIONS
+// INTERACTION HANDLER
 // =====================================================
 
-async function handleFamilyPanelCommand(client, interaction) {
-  if (!interaction.isChatInputCommand()) return false;
-  if (interaction.commandName !== "familienpanel") return false;
+async function handleFamilyPanelInteraction(
+  client,
+  interaction
+) {
 
-  await sendFamilyPanel(client, interaction);
+  if (
+    !interaction.isChatInputCommand() ||
+    interaction.commandName !== "familienpanel"
+  ) {
+    return false;
+  }
+
+  await sendFamilyPanel(
+    client,
+    interaction
+  );
+
   return true;
 }
 
-async function handleFamilyPanelInteraction(client, interaction) {
-  if (await handleFamilyPanelCommand(client, interaction)) return true;
-  return false;
-}
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   familyPanelCommand,

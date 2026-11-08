@@ -1,0 +1,423 @@
+{
+  "postedDates": {
+    "2026-11-07": {
+      "messageId": "1568689466103697581",
+      "createdAt": "2026-11-07T18:18:24.242Z",
+      "reason": "existing-message-found"
+    }
+  },
+  "lineups": {
+    "2026-11-07": {
+      "dateKey": "2026-11-07",
+      "dateText": "07.11.2026",
+      "weekday": "Samstag",
+      "title": "Tagesaufstellung",
+      "startTimeText": "20:00 - 20:30",
+      "createdBy": "1508253166943342612",
+      "createdAt": 1794075504242,
+      "closed": true,
+      "cancelled": false,
+      "cancelledBy": null,
+      "cancelledAt": null,
+      "lastTimeChangeBy": null,
+      "lastTimeChangeAt": null,
+      "messageId": "1568689466103697581",
+      "users": {}
+    }
+  },
+  "sanctions": {
+    "ccmw6r248x1fs7": {
+      "id": "ccmw6r248x1fs7",
+      "targetId": "782879541428224049",
+      "targetName": "Alex Kingsley",
+      "creatorId": "782879541428224049",
+      "items": [
+        {
+          "reason": "§2 Nichttragen der Familienkleidung während Familienaktionen",
+          "amount": 350000,
+          "special": null,
+          "note": null,
+          "catalogId": "p2"
+        },
+        {
+          "reason": "§38 Kolonne nicht rechtzeitig aufgestellt",
+          "amount": 150000,
+          "special": null,
+          "note": null,
+          "catalogId": "p38"
+        }
+      ],
+      "totalAmount": 500000,
+      "status": "paid",
+      "createdAt": 1794076890369,
+      "dueAt": 1794681690369,
+      "messageId": "1568696919704867028",
+      "paidBy": "782879541428224049",
+      "paidAt": 1794076895927,
+      "cancelledBy": null,
+      "cancelledAt": null,
+      "overdueNotified": false
+    },
+    "ccmw7eyotkp5d7": {
+      "id": "ccmw7eyotkp5d7",
+      "targetId": "782879541428224049",
+      "targetName": "Alex Kingsley",
+      "creatorId": "782879541428224049",
+      "items": [
+        {
+          "reason": "§24 Verkauf oder Preisgabe der Familie",
+          "amount": 0,
+          "special": "Bloodout",
+          "note": null,
+          "catalogId": "p24"
+        },
+        {
+          "reason": "§4 Nichteinhaltung der Funkdisziplin",
+          "amount": 140000,
+          "special": null,
+          "note": null,
+          "catalogId": "p4"
+        },
+        {
+          "reason": "§2 Nichttragen der Familienkleidung während Familienaktionen",
+          "amount": 350000,
+          "special": null,
+          "note": null,
+          "catalogId": "p2"
+        }
+      ],
+      "totalAmount": 490000,
+      "status": "cancelled",
+      "createdAt": 1794117041192,
+      "dueAt": 1794721841192,
+      "messageId": "1568865321165525176",
+      "paidBy": null,
+      "paidAt": null,
+      "cancelledBy": "782879541428224049",
+      "cancelledAt": 1794117045608,
+      "overdueNotified": false
+    }
+  },
+  "footballEvents": {},
+  "weeklyPayments": {},
+  "weeklySummaries": {},
+  "weeklyPaymentPauses": {},
+  "lineupReminders": {
+    "2026-11-07": {
+      "sentAt": "2026-11-07T18:30:30.362Z",
+      "lineupMessageId": "1568689466103697581"
+    }
+  },
+  "dailyReports": {},
+  "healthChecks": {},
+  "backups": {},
+  "absences": {
+    "mw6ro4leur7ce": {
+      "id": "mw6ro4leur7ce",
+      "userId": "782879541428224049",
+      "name": "Alex Kingsley",
+      "fromDateKey": "2026-11-07",
+      "fromDateText": "07.11.2026",
+      "untilDateKey": "2026-11-07",
+      "untilDateText": "07.11.2026",
+      "reason": "Test",
+      "status": "Genehmigt",
+      "decidedBy": "782879541428224049",
+      "decidedAt": 1794077921335,
+      "messageId": "1568701225803972631",
+      "createdAt": 1794077917250,
+      "updatedAt": 1794077921335
+    },
+    "mw7ezb7e15c2b": {
+      "id": "mw7ezb7e15c2b",
+      "userId": "782879541428224049",
+      "name": "Alex Kingsley",
+      "fromDateKey": "2026-11-08",
+      "fromDateText": "08.11.2026",
+      "untilDateKey": "2026-11-08",
+      "untilDateText": "08.11.2026",
+      "reason": "test",
+      "status": "Abgelehnt",
+      "decidedBy": "782879541428224049",
+      "decidedAt": 1794117073397,
+      "messageId": "1568865443031023728",
+      "createdAt": 1794117070202,
+      "updatedAt": 1794117073397
+    }
+  },
+  "storage": {
+    "categories": {},
+    "panelMessageId": "1568701588862664735",
+    "logs": []
+  },
+  "combatTrainings": {
+    "ctmw7ahi5mqea5": {
+      "title": "TEST",
+      "dateText": "08.11.2026",
+      "timeText": "18:00",
+      "placeText": "Anwesen",
+      "description": "TEST",
+      "id": "ctmw7ahi5mqea5",
+      "creatorId": "782879541428224049",
+      "guildId": "1542602740771983550",
+      "status": "open",
+      "users": {},
+      "createdAt": 1794109520938,
+      "updatedAt": 1794109520938,
+      "messageId": "1568833779739394199"
+    },
+    "ctmw7dei5hx5t7": {
+      "title": "TEST2",
+      "dateText": "08.11.2026",
+      "timeText": "19:00",
+      "placeText": "Anwesen",
+      "description": "TEST",
+      "id": "ctmw7dei5hx5t7",
+      "creatorId": "782879541428224049",
+      "guildId": "1542602740771983550",
+      "status": "open",
+      "users": {},
+      "createdAt": 1794114419813,
+      "updatedAt": 1794115068354,
+      "messageId": "1568854326720466996",
+      "lastChangedBy": "782879541428224049",
+      "lastEditedBy": "782879541428224049"
+    }
+  },
+  "ccWeeklyDashboard": {
+    "channelId": "1568838478048006175",
+    "messageId": "1568847974287679519",
+    "week": {
+      "id": "2026-11-08",
+      "startDate": "2026-11-08",
+      "endDate": "2026-11-15",
+      "period": "08.11.2026 – 15.11.2026",
+      "amount": 350000,
+      "penalty": 100000,
+      "createdAt": 1794112905286,
+      "members": {
+        "401402298544160779": {
+          "name": "Shade Lovell",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "496778951750975489": {
+          "name": "Harry Berge",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "689400414789304361": {
+          "name": "Luna Gonzalez",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "740300622389182576": {
+          "name": "Nicky Lovell",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "766982508877053953": {
+          "name": "Pascal White",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "807655670521397258": {
+          "name": "Matthias Groschke",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "827919696237559821": {
+          "name": "Ahmed Ibrahim",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "968576681264685106": {
+          "name": "Ayse Akbas",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "973093115277746238": {
+          "name": "Karsten Maier",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1049839383903227985": {
+          "name": "Kuba Kowalski",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1085280455596711956": {
+          "name": "Chiko Cartridge",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1245828478872453253": {
+          "name": "Chris Meyer",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1258809132744577105": {
+          "name": "Coci Pompaci",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1443603862865969323": {
+          "name": "Karam Virko",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1450924376470978754": {
+          "name": "Pacco Gacho",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1523479177636872322": {
+          "name": "Lindi Berisha",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1556677968619769931": {
+          "name": "Bernd Hansen",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1557028443412242463": {
+          "name": "Abu Asis",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        },
+        "1563346932909215899": {
+          "name": "Klaus Herrman",
+          "status": "open",
+          "paidAt": null,
+          "paidBy": null,
+          "excusedAt": null,
+          "excusedBy": null,
+          "excusedReason": null,
+          "sanctionId": null
+        }
+      }
+    }
+  },
+  "ccServerInfo": {
+    "info": {
+      "funk": "",
+      "funkPassword": "Drake",
+      "darkChat": "6WXME7",
+      "bennysPassword": "Ein Scheiß kriegst du",
+      "casa": "5009"
+    },
+    "categoryId": "1568870256179421194",
+    "guildId": "1542602740771983550",
+    "memberCounterChannelId": "1568861081944719362",
+    "hangaroundCounterChannelId": "1568861083077312614",
+    "funkChannelId": "1568861084343869540",
+    "lagerfunkChannelId": null,
+    "panelChannelId": null,
+    "panelMessageId": null,
+    "inviteUrl": "",
+    "lastCounterRefreshAt": 1794118218304,
+    "funkPasswordChannelId": "1568862562810990702",
+    "darkChatChannelId": "1568862564002037821",
+    "bennysPasswordChannelId": "1568862564996091907",
+    "casaChannelId": "1568862566682206208"
+  },
+  "ccLogChannels": {
+    "sanctions": "1568702067311251597",
+    "absences": "1568702225654747167",
+    "bot": "1568702320974241933",
+    "errors": "1568702361088827473",
+    "storage": "1568702391555985478"
+  },
+  "ccLogLastBackupDate": "2026-11-08"
+}

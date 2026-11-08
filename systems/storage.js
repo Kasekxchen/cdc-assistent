@@ -33,7 +33,7 @@ const { sendToChannel, safeReply } = require("../utils/discord");
 
 const storagePanelCommand = new SlashCommandBuilder()
   .setName("lagerpanel")
-  .setDescription("Sendet oder aktualisiert das SMV-Lagerpanel.");
+  .setDescription("Sendet oder aktualisiert das CC-Lagerpanel.");
 
 const storageRescueCommand = new SlashCommandBuilder()
   .setName("lager-retten")
@@ -225,7 +225,7 @@ function createStoragePanelEmbed(storage) {
 
   const embed = new EmbedBuilder()
     .setColor(CONFIG.embedColor)
-    .setTitle("📦 • SMV LAGER")
+    .setTitle("📦 • CC LAGER")
     .setDescription(
       [
         "━━━━━━━━━━━━━━━━━━━━",

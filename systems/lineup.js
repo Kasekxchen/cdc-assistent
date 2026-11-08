@@ -37,7 +37,7 @@ const lineupForceTodayCommand = new SlashCommandBuilder()
 // =====================================================
 
 function isLineupDay(weekday) {
-  // CDC: Jeden Tag ist Aufstellung, auch Montag und Freitag.
+  // CC: Jeden Tag ist Aufstellung, auch Montag und Freitag.
   return [
     "Montag",
     "Dienstag",
@@ -424,7 +424,7 @@ async function announceLineupCancelled(client, lineup, leaderId) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "🛑 **CDC AUFSTELLUNG ABGESAGT**",
+      "🛑 **CC AUFSTELLUNG ABGESAGT**",
       "",
       "Die heutige Aufstellung wurde von der Leaderschaft abgesagt.",
       "",
@@ -441,7 +441,7 @@ async function announceLineupReopened(client, lineup, leaderId) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "🔓 **CDC AUFSTELLUNG WIEDER GEÖFFNET**",
+      "🔓 **CC AUFSTELLUNG WIEDER GEÖFFNET**",
       "",
       "Die heutige Aufstellung wurde wieder geöffnet.",
       "",
@@ -759,7 +759,7 @@ async function cancelLineup(client, interaction, dateKey, alreadyAcknowledged = 
   await updateLineupMessage(client, lineup);
   await announceLineupCancelled(client, lineup, interaction.user.id);
 
-  const doneMessage = "✅ Aufstellung wurde abgesagt und die CDC-Rolle wurde informiert.";
+  const doneMessage = "✅ Aufstellung wurde abgesagt und die CC-Rolle wurde informiert.";
 
   if (alreadyAcknowledged && interaction.followUp) {
     return interaction.followUp({
@@ -812,7 +812,7 @@ async function reopenLineup(client, interaction, dateKey, alreadyAcknowledged = 
   await updateLineupMessage(client, lineup);
   await announceLineupReopened(client, lineup, interaction.user.id);
 
-  const doneMessage = "✅ Aufstellung wurde wieder geöffnet und die CDC-Rolle wurde informiert.";
+  const doneMessage = "✅ Aufstellung wurde wieder geöffnet und die CC-Rolle wurde informiert.";
 
   if (alreadyAcknowledged && interaction.followUp) {
     return interaction.followUp({
@@ -860,7 +860,7 @@ async function changeLineupTime(client, interaction, dateKey) {
   await announceLineupTimeChanged(client, lineup, oldTime, newTime, interaction.user.id);
 
   return safeReply(interaction, {
-    content: `✅ Aufstellungsuhrzeit wurde von **${oldTime}** auf **${newTime}** geändert und die CDC-Rolle wurde informiert.`,
+    content: `✅ Aufstellungsuhrzeit wurde von **${oldTime}** auf **${newTime}** geändert und die CC-Rolle wurde informiert.`,
     ephemeral: true,
   });
 }
@@ -897,7 +897,7 @@ async function checkLineupReminders(client) {
     content: [
       `<@&${CONFIG.lineupMentionRoleId}>`,
       "",
-      "⏰ **CDC AUFSTELLUNGS-ERINNERUNG**",
+      "⏰ **CC AUFSTELLUNGS-ERINNERUNG**",
       "",
       "Die Aufstellung beginnt in ungefähr **30 Minuten**.",
       "",

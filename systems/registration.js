@@ -1,3 +1,4 @@
+
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -11,10 +12,34 @@ const {
 
 const CONFIG = require("../config");
 
-const { cleanName, getReadableUserName } = require("../utils/format");
-const { getGermanDateTime } = require("../utils/dates");
-const { hasLeaderPermission } = require("../utils/permissions");
-const { sendToChannel, safeReply } = require("../utils/discord");
+const {
+  cleanName,
+  getReadableUserName,
+} = require("../utils/format");
+
+const {
+  getGermanDateTime,
+} = require("../utils/dates");
+
+const {
+  hasLeaderPermission,
+} = require("../utils/permissions");
+
+const {
+  sendToChannel,
+  safeReply,
+} = require("../utils/discord");
+
+// =====================================================
+// BUTTON-IDS
+// =====================================================
+
+const REGISTER_BUTTON_ID = "cc_register_button";
+const REGISTER_MODAL_ID = "cc_register_modal";
+
+// Kompatibilität mit älteren Panels
+const LEGACY_BUTTON_ID = "smv_register_button";
+const LEGACY_MODAL_ID = "smv_register_modal";
 
 // =====================================================
 // SLASH COMMAND
@@ -22,31 +47,54 @@ const { sendToChannel, safeReply } = require("../utils/discord");
 
 const registrationPanelCommand = new SlashCommandBuilder()
   .setName("registrierungspanel")
-  .setDescription("Sendet das SMV-Registrierungspanel.");
+  .setDescription("Sendet das CC-Registrierungspanel.");
 
 // =====================================================
-// ROLLEN
+// ROLLEN NACH REGISTRIERUNG
 // =====================================================
 
 async function addRegisteredRoles(member) {
   const addedRoles = [];
   const failedRoles = [];
 
-  for (const roleId of CONFIG.registeredRoleIds) {
+  const roleIds = [
+    ...new Set(CONFIG.registeredRoleIds || []),
+  ];
+
+  for (const roleId of roleIds) {
     try {
-      const role = await member.guild.roles.fetch(roleId).catch(() => null);
+      const role = await member.guild.roles
+        .fetch(roleId)
+        .catch(() => null);
 
       if (!role) {
         failedRoles.push(roleId);
-        console.error(`❌ Rolle nicht gefunden: ${roleId}`);
+
+        console.error(
+          `❌ CC-Registrierung: Rolle nicht gefunden (${roleId}).`
+        );
+
         continue;
       }
 
-      await member.roles.add(role, "SMV Registrierung");
+      if (member.roles.cache.has(roleId)) {
+        addedRoles.push(role.name);
+        continue;
+      }
+
+      await member.roles.add(
+        role,
+        "CC Registrierung"
+      );
+
       addedRoles.push(role.name);
     } catch (error) {
       failedRoles.push(roleId);
-      console.error(`❌ Rolle konnte nicht vergeben werden (${roleId}):`, error);
+
+      console.error(
+        `❌ CC-Registrierung: Rolle ${roleId} konnte nicht vergeben werden:`,
+        error
+      );
     }
   }
 
@@ -67,9 +115,10 @@ function createRegisterPanelEmbed() {
     .setDescription(
       [
         "━━━━━━━━━━━━━━━━━━━━",
-        `Privet, willkommen bei der Familie **${CONFIG.familyName}**.`,
         "",
-        "**📝 Registrierung**",
+        "¡Bienvenido a la familia **Cartel del Caido**!",
+        "",
+        "📝 **Registrierung**",
         "└ Drücke unten auf den Button und trage deinen **Vor- und Nachnamen** ein.",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -80,20 +129,28 @@ function createRegisterPanelEmbed() {
     });
 }
 
+// =====================================================
+// REGISTRIERUNGSBUTTON
+// =====================================================
+
 function createRegisterButtonRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("smv_register_button")
+      .setCustomId(REGISTER_BUTTON_ID)
       .setLabel("Registrieren")
       .setEmoji("👤")
       .setStyle(ButtonStyle.Primary)
   );
 }
 
+// =====================================================
+// REGISTRIERUNGSFORMULAR
+// =====================================================
+
 function createRegisterModal() {
   const modal = new ModalBuilder()
-    .setCustomId("smv_register_modal")
-    .setTitle("SMV Registrierung");
+    .setCustomId(REGISTER_MODAL_ID)
+    .setTitle("CC Registrierung");
 
   const firstNameInput = new TextInputBuilder()
     .setCustomId("first_name")
@@ -122,31 +179,42 @@ function createRegisterModal() {
 }
 
 // =====================================================
-// PANEL SENDEN
+// REGISTRIERUNGSPANEL SENDEN
 // =====================================================
 
 async function sendRegistrationPanel(client, interaction) {
   if (!hasLeaderPermission(interaction.member)) {
     return safeReply(interaction, {
-      content: "❌ Du hast keine Berechtigung, das Registrierungspanel zu senden.",
+      content:
+        "❌ Nur die Leaderschaft darf das Registrierungspanel veröffentlichen.",
       ephemeral: true,
     });
   }
 
-  const message = await sendToChannel(client, CONFIG.registrationChannelId, {
-    embeds: [createRegisterPanelEmbed()],
-    components: [createRegisterButtonRow()],
-  });
+  const message = await sendToChannel(
+    client,
+    CONFIG.registrationChannelId,
+    {
+      embeds: [
+        createRegisterPanelEmbed(),
+      ],
+      components: [
+        createRegisterButtonRow(),
+      ],
+    }
+  );
 
   if (!message) {
     return safeReply(interaction, {
-      content: "❌ Registrierungspanel konnte nicht gesendet werden. Bitte prüfe Channel-ID und Bot-Rechte.",
+      content:
+        "❌ Das Registrierungspanel konnte nicht gesendet werden. Prüfe Kanal-ID und Bot-Rechte.",
       ephemeral: true,
     });
   }
 
   return safeReply(interaction, {
-    content: `✅ Registrierungspanel wurde in <#${CONFIG.registrationChannelId}> gesendet.`,
+    content:
+      `✅ Registrierungspanel wurde in <#${CONFIG.registrationChannelId}> veröffentlicht.`,
     ephemeral: true,
   });
 }
@@ -156,145 +224,335 @@ async function sendRegistrationPanel(client, interaction) {
 // =====================================================
 
 async function submitRegistration(interaction) {
-  const firstName = cleanName(interaction.fields.getTextInputValue("first_name"));
-  const lastName = cleanName(interaction.fields.getTextInputValue("last_name"));
+  const firstName = cleanName(
+    interaction.fields.getTextInputValue("first_name")
+  );
+
+  const lastName = cleanName(
+    interaction.fields.getTextInputValue("last_name")
+  );
 
   if (!firstName || !lastName) {
     return safeReply(interaction, {
-      content: "❌ Bitte gib einen gültigen Vor- und Nachnamen ein.",
+      content:
+        "❌ Bitte gib einen gültigen Vor- und Nachnamen ein.",
       ephemeral: true,
     });
   }
 
   const fullName = `${firstName} ${lastName}`;
-  const newNickname = `${CONFIG.nicknamePrefix} ${fullName}`;
 
-  const member = interaction.member;
+  // Beispiel: CC I Max Mustermann
+  const nickname = `${CONFIG.nicknamePrefix} ${fullName}`;
+
+  // Discord erlaubt maximal 32 Zeichen.
+  if (nickname.length > 32) {
+    return safeReply(interaction, {
+      content:
+        `❌ Der Nickname wäre zu lang (${nickname.length}/32 Zeichen). ` +
+        "Bitte kürze deinen Vor- oder Nachnamen.",
+      ephemeral: true,
+    });
+  }
+
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+
+  if (!member) {
+    return safeReply(interaction, {
+      content:
+        "❌ Dein Serverprofil konnte nicht geladen werden. Bitte versuche es erneut.",
+      ephemeral: true,
+    });
+  }
+
+  await interaction.deferReply({
+    ephemeral: true,
+  });
+
+  // ===================================================
+  // NICKNAME SETZEN
+  // ===================================================
 
   let nicknameChanged = false;
   let nicknameError = null;
 
   try {
-    await member.setNickname(newNickname, "SMV Registrierung");
+    await member.setNickname(
+      nickname,
+      "CC Registrierung"
+    );
+
     nicknameChanged = true;
   } catch (error) {
     nicknameError = error;
-    console.error("❌ Nickname konnte nicht geändert werden:", error);
+
+    console.error(
+      "❌ CC-Registrierung: Nickname konnte nicht gesetzt werden:",
+      error
+    );
   }
 
-  const { addedRoles, failedRoles } = await addRegisteredRoles(member);
+  // ===================================================
+  // ROLLEN VERGEBEN
+  // ===================================================
 
-  const description = [
-    "✅ **Registrierung abgeschlossen.**",
+  const {
+    addedRoles,
+    failedRoles,
+  } = await addRegisteredRoles(member);
+
+  // ===================================================
+  // ERGEBNIS
+  // ===================================================
+
+  const result = [
+    nicknameChanged && failedRoles.length === 0
+      ? "✅ **Registrierung erfolgreich!**"
+      : "⚠️ **Registrierung teilweise abgeschlossen.**",
+
     "",
     `👤 **Name:** ${fullName}`,
-    `🏷️ **Nickname:** ${nicknameChanged ? newNickname : "Konnte nicht gesetzt werden"}`,
-    "",
-    addedRoles.length
-      ? `✅ **Rollen vergeben:** ${addedRoles.join(", ")}`
-      : "⚠️ **Rollen vergeben:** Keine",
-    failedRoles.length
-      ? `❌ **Fehlgeschlagene Rollen:** ${failedRoles.join(", ")}`
-      : null,
-    nicknameError
-      ? "⚠️ Der Nickname konnte nicht gesetzt werden. Bitte prüfe, ob die Bot-Rolle hoch genug ist."
-      : null,
-  ].filter(Boolean).join("\n");
 
-  return safeReply(interaction, {
-    content: description,
-    ephemeral: true,
+    `🏷️ **Nickname:** ${
+      nicknameChanged
+        ? nickname
+        : "Konnte nicht gesetzt werden"
+    }`,
+
+    "",
+
+    addedRoles.length
+      ? `✅ **Rollen erhalten:** ${addedRoles.join(", ")}`
+      : "⚠️ **Rollen erhalten:** Keine",
+
+    failedRoles.length
+      ? `❌ **Rollen nicht vergeben:** ${
+          failedRoles
+            .map((id) => `\`${id}\``)
+            .join(", ")
+        }`
+      : null,
+
+    nicknameError
+      ? "⚠️ Der Bot benötigt die Berechtigung **Nicknames verwalten** und muss in der Rollenliste über dem Mitglied stehen."
+      : null,
+
+    failedRoles.length
+      ? "⚠️ Prüfe, ob der Bot **Rollen verwalten** darf und seine Rolle über beiden Registrierungsrollen steht."
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return interaction.editReply({
+    content: result,
   });
 }
 
 // =====================================================
-// JOIN / LEAVE NACHRICHTEN
+// WILLKOMMENSNACHRICHT
 // =====================================================
 
 async function sendWelcomeMessage(client, member) {
-  const name = getReadableUserName(member, member.user);
+  const name = getReadableUserName(
+    member,
+    member.user
+  );
 
-  await sendToChannel(client, CONFIG.welcomeChannelId, {
-    embeds: [
-      new EmbedBuilder()
-        .setColor(CONFIG.successColor)
-        .setTitle("👋 Willkommen")
-        .setDescription(
-          [
-            "━━━━━━━━━━━━━━━━━━━━",
-            `Willkommen bei **${CONFIG.familyName}**, **${name}**.`,
-            "",
-            `Bitte registriere dich in <#${CONFIG.registrationChannelId}>.`,
-            "━━━━━━━━━━━━━━━━━━━━",
-          ].join("\n")
-        )
-        .setFooter({
-          text: `${CONFIG.shortName} • Willkommen • ${getGermanDateTime()}`,
-        }),
-    ],
-  });
+  await sendToChannel(
+    client,
+    CONFIG.welcomeChannelId,
+    {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(CONFIG.successColor)
+          .setTitle("👋 Willkommen bei Cartel del Caido")
+          .setDescription(
+            [
+              "━━━━━━━━━━━━━━━━━━━━",
+              "",
+              `Willkommen bei **${CONFIG.familyName}**, **${name}**.`,
+              "",
+              `Bitte registriere dich in <#${CONFIG.registrationChannelId}>.`,
+              "",
+              "━━━━━━━━━━━━━━━━━━━━",
+            ].join("\n")
+          )
+          .setFooter({
+            text:
+              `${CONFIG.shortName} • Willkommen • ${getGermanDateTime()}`,
+          }),
+      ],
+      allowedMentions: {
+        parse: [],
+      },
+    }
+  );
 }
+
+// =====================================================
+// BLOODOUT / VERLASSEN
+// =====================================================
 
 async function sendLeaveMessage(client, member) {
-  const name = getReadableUserName(member, member.user);
+  const name = getReadableUserName(
+    member,
+    member.user
+  );
 
-  await sendToChannel(client, CONFIG.leaveChannelId, {
-    embeds: [
-      new EmbedBuilder()
-        .setColor(CONFIG.dangerColor)
-        .setTitle("🚪 Mitglied verlassen")
-        .setDescription(
-          [
-            "━━━━━━━━━━━━━━━━━━━━",
-            `Poka, **${name}**!`,
-            "",
-            "Ein Mitglied hat den Server verlassen.",
-            "━━━━━━━━━━━━━━━━━━━━",
-          ].join("\n")
-        )
-        .setFooter({
-          text: `${CONFIG.shortName} • Leave • ${getGermanDateTime()}`,
-        }),
-    ],
-    allowedMentions: { parse: [] },
-  });
+  await sendToChannel(
+    client,
+    CONFIG.leaveChannelId,
+    {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(CONFIG.dangerColor)
+          .setTitle("🚪 Mitglied verlassen")
+          .setDescription(
+            [
+              "━━━━━━━━━━━━━━━━━━━━",
+              "",
+              `**${name}** hat den Server verlassen.`,
+              "",
+              "━━━━━━━━━━━━━━━━━━━━",
+            ].join("\n")
+          )
+          .setFooter({
+            text:
+              `${CONFIG.shortName} • Bloodout • ${getGermanDateTime()}`,
+          }),
+      ],
+      allowedMentions: {
+        parse: [],
+      },
+    }
+  );
 }
 
 // =====================================================
-// INTERACTIONS
+// SLASH COMMAND HANDLER
 // =====================================================
 
-async function handleRegistrationCommand(client, interaction) {
-  if (!interaction.isChatInputCommand()) return false;
-  if (interaction.commandName !== "registrierungspanel") return false;
+async function handleRegistrationCommand(
+  client,
+  interaction
+) {
+  if (!interaction.isChatInputCommand()) {
+    return false;
+  }
 
-  await sendRegistrationPanel(client, interaction);
+  if (
+    interaction.commandName !==
+    "registrierungspanel"
+  ) {
+    return false;
+  }
+
+  await sendRegistrationPanel(
+    client,
+    interaction
+  );
+
   return true;
 }
 
-async function handleRegistrationButton(client, interaction) {
-  if (!interaction.isButton()) return false;
-  if (interaction.customId !== "smv_register_button") return false;
+// =====================================================
+// REGISTRIERUNGSBUTTON HANDLER
+// =====================================================
 
-  await interaction.showModal(createRegisterModal());
+async function handleRegistrationButton(
+  client,
+  interaction
+) {
+  if (!interaction.isButton()) {
+    return false;
+  }
+
+  if (
+    ![
+      REGISTER_BUTTON_ID,
+      LEGACY_BUTTON_ID,
+    ].includes(interaction.customId)
+  ) {
+    return false;
+  }
+
+  await interaction.showModal(
+    createRegisterModal()
+  );
+
   return true;
 }
 
-async function handleRegistrationModal(client, interaction) {
-  if (!interaction.isModalSubmit()) return false;
-  if (interaction.customId !== "smv_register_modal") return false;
+// =====================================================
+// REGISTRIERUNGSFORMULAR HANDLER
+// =====================================================
+
+async function handleRegistrationModal(
+  client,
+  interaction
+) {
+  if (!interaction.isModalSubmit()) {
+    return false;
+  }
+
+  if (
+    ![
+      REGISTER_MODAL_ID,
+      LEGACY_MODAL_ID,
+    ].includes(interaction.customId)
+  ) {
+    return false;
+  }
 
   await submitRegistration(interaction);
+
   return true;
 }
 
-async function handleRegistrationInteraction(client, interaction) {
-  if (await handleRegistrationCommand(client, interaction)) return true;
-  if (await handleRegistrationButton(client, interaction)) return true;
-  if (await handleRegistrationModal(client, interaction)) return true;
+// =====================================================
+// HAUPT-HANDLER
+// =====================================================
+
+async function handleRegistrationInteraction(
+  client,
+  interaction
+) {
+  if (
+    await handleRegistrationCommand(
+      client,
+      interaction
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    await handleRegistrationButton(
+      client,
+      interaction
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    await handleRegistrationModal(
+      client,
+      interaction
+    )
+  ) {
+    return true;
+  }
 
   return false;
 }
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   registrationPanelCommand,

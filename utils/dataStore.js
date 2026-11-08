@@ -2,25 +2,37 @@ const fs = require("fs");
 const path = require("path");
 
 // =====================================================
-// DATENPFAD
+// CC DATENSPEICHER
 // =====================================================
 //
-// Standard:
-// - Lokal / normal: Projektordner/data
+// Lokal:
+//   data/smv-data.json
 //
-// Railway mit Volume:
-// - In Railway Variable setzen: DATA_DIR=/data
-// - Volume auf /data mounten
+// Railway:
+//   DATA_DIR=/data
+//   Volume auf /data mounten
 //
-// Dann bleiben smv-data.json und Backups auch nach Deploys erhalten.
+// Der technische Dateiname bleibt erhalten.
+// Vorhandene Daten werden nicht absichtlich gelöscht.
 // =====================================================
 
 const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(__dirname, "..", "data");
 
-const DATA_FILE = path.join(DATA_DIR, "smv-data.json");
-const BACKUP_DIR = path.join(DATA_DIR, "backups");
+const DATA_FILE = path.join(
+  DATA_DIR,
+  "smv-data.json"
+);
+
+const BACKUP_DIR = path.join(
+  DATA_DIR,
+  "backups"
+);
+
+// =====================================================
+// STANDARDDATEN
+// =====================================================
 
 function getDefaultData() {
   return {
@@ -45,33 +57,58 @@ function getDefaultData() {
   };
 }
 
+// =====================================================
+// DATEIEN ERSTELLEN
+// =====================================================
+
 function ensureDataFile() {
   if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(
+      DATA_DIR,
+      { recursive: true }
+    );
   }
 
   if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    fs.mkdirSync(
+      BACKUP_DIR,
+      { recursive: true }
+    );
   }
 
   if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(getDefaultData(), null, 2));
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(
+        getDefaultData(),
+        null,
+        2
+      )
+    );
   }
 }
 
-function normalizeStorageCategories(data = {}) {
-  const categories = data.storage?.categories || {};
+// =====================================================
+// ALTE LAGERDATEN KOMPATIBEL HALTEN
+// =====================================================
 
-  // Alte fehlerhafte Kategorie aus früherer Version entfernen.
+function normalizeStorageCategories(data = {}) {
+  const categories =
+    data.storage?.categories || {};
+
   if (
     categories.kurzwafen &&
     categories.kurzwaffen &&
-    categories.kurzwafen.id === categories.kurzwaffen.id
+    categories.kurzwafen.id ===
+      categories.kurzwaffen.id
   ) {
     delete categories.kurzwafen;
   }
 
-  for (const category of Object.values(categories || {})) {
+  for (
+    const category
+    of Object.values(categories)
+  ) {
     if (!category.items) {
       category.items = {};
     }
@@ -80,6 +117,10 @@ function normalizeStorageCategories(data = {}) {
   return categories;
 }
 
+// =====================================================
+// DATEN NORMALISIEREN
+// =====================================================
+
 function normalizeData(data = {}) {
   const defaults = getDefaultData();
 
@@ -87,53 +128,159 @@ function normalizeData(data = {}) {
     ...defaults,
     ...data,
 
-    postedDates: data.postedDates || {},
-    lineups: data.lineups || {},
-    sanctions: data.sanctions || {},
-    footballEvents: data.footballEvents || {},
-    weeklyPayments: data.weeklyPayments || {},
-    weeklySummaries: data.weeklySummaries || {},
-    weeklyPaymentPauses: data.weeklyPaymentPauses || {},
-    lineupReminders: data.lineupReminders || {},
-    dailyReports: data.dailyReports || {},
-    healthChecks: data.healthChecks || {},
-    backups: data.backups || {},
-    absences: data.absences || {},
+    postedDates:
+      data.postedDates || {},
+
+    lineups:
+      data.lineups || {},
+
+    sanctions:
+      data.sanctions || {},
+
+    footballEvents:
+      data.footballEvents || {},
+
+    weeklyPayments:
+      data.weeklyPayments || {},
+
+    weeklySummaries:
+      data.weeklySummaries || {},
+
+    weeklyPaymentPauses:
+      data.weeklyPaymentPauses || {},
+
+    lineupReminders:
+      data.lineupReminders || {},
+
+    dailyReports:
+      data.dailyReports || {},
+
+    healthChecks:
+      data.healthChecks || {},
+
+    backups:
+      data.backups || {},
+
+    absences:
+      data.absences || {},
 
     storage: {
       ...defaults.storage,
       ...(data.storage || {}),
-      categories: normalizeStorageCategories(data),
-      logs: data.storage?.logs || [],
-      panelMessageId: data.storage?.panelMessageId || null,
+
+      categories:
+        normalizeStorageCategories(data),
+
+      logs:
+        data.storage?.logs || [],
+
+      panelMessageId:
+        data.storage?.panelMessageId || null,
     },
   };
 }
+
+// =====================================================
+// DATEN LADEN
+// =====================================================
 
 function loadData() {
   ensureDataFile();
 
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    const raw = fs.readFileSync(
+      DATA_FILE,
+      "utf8"
+    );
+
     const parsed = JSON.parse(raw);
+
     return normalizeData(parsed);
+
   } catch (error) {
-    console.error("❌ smv-data.json konnte nicht gelesen werden:", error);
+    console.error(
+      "❌ smv-data.json konnte nicht gelesen werden:",
+      error
+    );
+
     return getDefaultData();
   }
 }
 
+// =====================================================
+// SPEICHERBENACHRICHTIGUNGEN
+// =====================================================
+
+const dataSavedListeners = new Set();
+
+function onDataSaved(listener) {
+  if (typeof listener !== "function") {
+    throw new TypeError(
+      "Listener muss eine Funktion sein."
+    );
+  }
+
+  dataSavedListeners.add(listener);
+
+  return () =>
+    dataSavedListeners.delete(listener);
+}
+
+// =====================================================
+// DATEN SPEICHERN
+// =====================================================
+
 function saveData(data) {
   ensureDataFile();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(normalizeData(data), null, 2));
+
+  const normalized =
+    normalizeData(data);
+
+  fs.writeFileSync(
+    DATA_FILE,
+    JSON.stringify(
+      normalized,
+      null,
+      2
+    )
+  );
+
+  // Nach jedem erfolgreichen Speichern prüfen
+  // die registrierten Listener Änderungen.
+  for (const listener of dataSavedListeners) {
+    try {
+      Promise.resolve(
+        listener(normalized)
+      ).catch((error) => {
+        console.error(
+          "❌ Daten-Log Listener:",
+          error
+        );
+      });
+
+    } catch (error) {
+      console.error(
+        "❌ Daten-Log Listener:",
+        error
+      );
+    }
+  }
 }
+
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   DATA_DIR,
   DATA_FILE,
   BACKUP_DIR,
+
   getDefaultData,
   ensureDataFile,
+
   loadData,
   saveData,
+
+  onDataSaved,
 };

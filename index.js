@@ -1,6 +1,5 @@
 // =====================================================
-// SMV-Assistent | index.js
-// Zentrale Startdatei
+// CC-ASSISTENT | INDEX.JS
 // =====================================================
 
 require("dotenv").config();
@@ -14,39 +13,69 @@ const {
 } = require("discord.js");
 
 const CONFIG = require("./config");
-const { initDatabase } = require("./database");
-const { getSlashCommandJson } = require("./commands/slashCommands");
-const { handleInteraction } = require("./handlers/interactions");
-const { startScheduler } = require("./scheduler");
+
+const {
+  initDatabase,
+} = require("./database");
+
+const {
+  getSlashCommandJson,
+} = require("./commands/slashCommands");
+
+const {
+  handleInteraction,
+} = require("./handlers/interactions");
+
+const {
+  startScheduler,
+} = require("./scheduler");
+
+const {
+  startServerInfoUpdater,
+  requestCounterRefresh,
+} = require("./systems/serverInfo");
+
+const {
+  initializeLogs,
+  logError,
+} = require("./systems/logs");
 
 const {
   sendWelcomeMessage,
   sendLeaveMessage,
 } = require("./systems/registration");
 
-const {
-  syncPayerRole,
-  syncAllPayerRoles,
-} = require("./systems/payerRoles");
-
 // =====================================================
-// ENV-CHECK
+// UMGEBUNGSVARIABLEN PRÜFEN
 // =====================================================
 
 function checkEnv() {
-  const requiredEnv = ["DISCORD_TOKEN", "CLIENT_ID", "GUILD_ID"];
-  const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+  const requiredEnv = [
+    "DISCORD_TOKEN",
+    "CLIENT_ID",
+    "GUILD_ID",
+  ];
+
+  const missingEnv = requiredEnv.filter(
+    key => !process.env[key]
+  );
 
   if (missingEnv.length > 0) {
-    console.error("❌ Fehlende Railway/.env Variablen:", missingEnv.join(", "));
+    console.error(
+      "❌ Fehlende .env-Variablen:",
+      missingEnv.join(", ")
+    );
+
     process.exit(1);
   }
 
-  console.log("✅ Alle wichtigen Variablen wurden gefunden.");
+  console.log(
+    "✅ Alle wichtigen Variablen gefunden."
+  );
 }
 
 // =====================================================
-// CLIENT
+// DISCORD CLIENT
 // =====================================================
 
 const client = new Client({
@@ -62,11 +91,18 @@ const client = new Client({
 
 async function registerSlashCommands() {
   try {
-    const commands = getSlashCommandJson();
+    const commands =
+      getSlashCommandJson();
 
-    const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+    const rest = new REST({
+      version: "10",
+    }).setToken(
+      process.env.DISCORD_TOKEN
+    );
 
-    console.log(`🔄 Registriere ${commands.length} Slash Commands...`);
+    console.log(
+      `🔄 Registriere ${commands.length} Slash Commands...`
+    );
 
     await rest.put(
       Routes.applicationGuildCommands(
@@ -78,23 +114,31 @@ async function registerSlashCommands() {
       }
     );
 
-    console.log("✅ Slash Commands wurden registriert.");
+    console.log(
+      "✅ Slash Commands registriert."
+    );
+
   } catch (error) {
-    console.error("❌ Slash Commands konnten nicht registriert werden:", error);
+    console.error(
+      "❌ Slash Commands konnten nicht registriert werden:",
+      error
+    );
   }
 }
 
 // =====================================================
-// READY
+// BOT BEREIT
 // =====================================================
 
 client.once("ready", async () => {
-  console.log(`✅ Eingeloggt als ${client.user.tag}`);
+  console.log(
+    `✅ Eingeloggt als ${client.user.tag}`
+  );
 
   client.user.setPresence({
     activities: [
       {
-        name: `${CONFIG.familyName}`,
+        name: CONFIG.familyName,
         type: ActivityType.Watching,
       },
     ],
@@ -102,64 +146,221 @@ client.once("ready", async () => {
   });
 
   await initDatabase();
+
   await registerSlashCommands();
 
-  await syncAllPayerRoles(client, "Bot-Start - Zahlende/r Prüfung");
+  // ===================================================
+  // CC LOGSYSTEM
+  // ===================================================
+  //
+  // Wichtig: Vor dem Scheduler starten.
+  // So werden auch automatische Bereinigungen
+  // und Sanktionsprüfungen protokolliert.
+  // ===================================================
+
+  try {
+    const logChannels =
+      await initializeLogs(client);
+
+    console.log(
+      "✅ CC-Logsystem gestartet."
+    );
+
+    console.log(
+      `✅ Aktive Logkanäle: ${
+        Object.keys(logChannels).length
+      }/5`
+    );
+
+  } catch (error) {
+    console.error(
+      "❌ CC-Logsystem konnte nicht gestartet werden:",
+      error
+    );
+  }
+
+  // ===================================================
+  // AUTOMATISCHE SYSTEME
+  // ===================================================
 
   startScheduler(client);
 
-  console.log(`✅ ${CONFIG.botName} ist vollständig gestartet.`);
+  // Info-Sprachkanäle und Rollenzähler.
+  startServerInfoUpdater(client);
+
+  console.log(
+    `✅ ${CONFIG.botName} vollständig gestartet.`
+  );
 });
 
 // =====================================================
-// EVENTS
+// INTERACTIONS
 // =====================================================
 
-client.on("interactionCreate", async (interaction) => {
-  await handleInteraction(client, interaction);
-});
+client.on(
+  "interactionCreate",
+  async interaction => {
+    try {
+      await handleInteraction(
+        client,
+        interaction
+      );
 
-client.on("guildMemberAdd", async (member) => {
-  try {
-    await sendWelcomeMessage(client, member);
-    await syncPayerRole(member, "Member Join - Zahlende/r Prüfung");
-  } catch (error) {
-    console.error("❌ Fehler bei guildMemberAdd:", error);
+    } catch (error) {
+      console.error(
+        "❌ Interaction-Fehler:",
+        error
+      );
+
+      logError(
+        error,
+        "Discord Interaction"
+      );
+    }
   }
-});
+);
 
-client.on("guildMemberRemove", async (member) => {
-  try {
-    await sendLeaveMessage(client, member);
-  } catch (error) {
-    console.error("❌ Fehler bei guildMemberRemove:", error);
+// =====================================================
+// MITGLIED TRITT SERVER BEI
+// =====================================================
+
+client.on(
+  "guildMemberAdd",
+  async member => {
+    try {
+      await sendWelcomeMessage(
+        client,
+        member
+      );
+
+    } catch (error) {
+      console.error(
+        "❌ Fehler bei guildMemberAdd:",
+        error
+      );
+    }
+
+    requestCounterRefresh(
+      client,
+      member.guild.id
+    );
   }
-});
+);
 
-client.on("guildMemberUpdate", async (oldMember, newMember) => {
-  try {
-    await syncPayerRole(newMember, "Rollenänderung - Zahlende/r Prüfung");
-  } catch (error) {
-    console.error("❌ Fehler bei guildMemberUpdate:", error);
+// =====================================================
+// MITGLIED VERLÄSST SERVER
+// =====================================================
+
+client.on(
+  "guildMemberRemove",
+  async member => {
+    try {
+      await sendLeaveMessage(
+        client,
+        member
+      );
+
+    } catch (error) {
+      console.error(
+        "❌ Fehler bei guildMemberRemove:",
+        error
+      );
+    }
+
+    requestCounterRefresh(
+      client,
+      member.guild.id
+    );
   }
-});
+);
 
-client.on("error", (error) => {
-  console.error("❌ Discord Client Error:", error);
-});
+// =====================================================
+// ROLLENÄNDERUNGEN
+// =====================================================
 
-process.on("unhandledRejection", (error) => {
-  console.error("❌ Unhandled Rejection:", error);
-});
+client.on(
+  "guildMemberUpdate",
+  (oldMember, newMember) => {
+    const relevantRoleIds = [
+      "1542602740771983553",
+      "1568852155543191603",
+    ];
 
-process.on("uncaughtException", (error) => {
-  console.error("❌ Uncaught Exception:", error);
+    const changed = relevantRoleIds.some(
+      roleId =>
+        oldMember.roles.cache.has(roleId) !==
+        newMember.roles.cache.has(roleId)
+    );
+
+    if (changed) {
+      requestCounterRefresh(
+        client,
+        newMember.guild.id
+      );
+    }
+  }
+);
+
+// =====================================================
+// DISCORD CLIENT FEHLER
+// =====================================================
+
+client.on("error", error => {
+  console.error(
+    "❌ Discord Client Error:",
+    error
+  );
+
+  logError(
+    error,
+    "Discord Client"
+  );
 });
 
 // =====================================================
-// START
+// UNBEHANDELTE PROMISE-FEHLER
+// =====================================================
+
+process.on(
+  "unhandledRejection",
+  error => {
+    console.error(
+      "❌ Unhandled Rejection:",
+      error
+    );
+
+    logError(
+      error,
+      "Unhandled Rejection"
+    );
+  }
+);
+
+// =====================================================
+// UNBEHANDELTE AUSNAHMEN
+// =====================================================
+
+process.on(
+  "uncaughtException",
+  error => {
+    console.error(
+      "❌ Uncaught Exception:",
+      error
+    );
+
+    logError(
+      error,
+      "Uncaught Exception"
+    );
+  }
+);
+
+// =====================================================
+// BOT STARTEN
 // =====================================================
 
 checkEnv();
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(
+  process.env.DISCORD_TOKEN
+);
