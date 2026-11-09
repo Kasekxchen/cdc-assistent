@@ -22,16 +22,16 @@ const { sendToChannel, safeReply } = require("../utils/discord");
 const WEEKLY_AMOUNT = 350000;
 const PENALTY_AMOUNT = 100000;
 
-// Nur Mitglieder mit dieser Rolle zahlen Wochenabgabe.
 const MEMBER_ROLE_ID = "1542602740771983553";
 
-// Nur diese Rolle darf die Wochenabgabe verwalten.
-const LEADER_ROLE_ID = "1542602740784562234";
+const MANAGEMENT_ROLES = [
+  "1542602740784562234", // Leaderschaft
+  "1569147990080487434", // Wochenabgabenverwaltung
+  "1568850050312831118", // Vollzugriff
+];
 
-const TIMEZONE = "Europe/Berlin";
 const PREFIX = "ccw_";
-
-const activeSanctionRuns = new Set();
+const sanctionRuns = new Set();
 
 // =====================================================
 // SLASH COMMAND
@@ -40,151 +40,93 @@ const activeSanctionRuns = new Set();
 const weeklyPanelCommand = new SlashCommandBuilder()
   .setName("wochenabgabe-panel")
   .setDescription(
-    "Erstellt oder aktualisiert die CC-Wochenabgabenübersicht."
+    "Veröffentlicht oder repariert das CC-Wochenabgabenpanel."
   );
 
 // =====================================================
 // BERECHTIGUNGEN
 // =====================================================
 
-function isLeader(member) {
+function hasManagementRole(member) {
+  const roles = member?.roles;
 
-  // CC_WEEKLY_EXTRA_ACCESS
-  // Zusätzliche CC-Verwaltungsrollen.
-  const extraRoles = ["1569147990080487434", "1568850050312831118"];
-
-  if (
-    extraRoles.some(roleId =>
-      member?.roles?.cache?.has(roleId) ||
+  return MANAGEMENT_ROLES.some(
+    id =>
+      roles?.cache?.has?.(id) ||
       (
-        Array.isArray(member?.roles) &&
-        member.roles.includes(roleId)
+        Array.isArray(roles) &&
+        roles.includes(id)
       )
-    )
-  ) {
-    return true;
-  }
-
-  // CC_SUPERADMIN: voller Zugriff auf Verwaltungsaktionen.
-  if (
-    member?.roles?.cache?.has(CONFIG.fullAccessRoleId) ||
-    (
-      Array.isArray(member?.roles) &&
-      member.roles.includes(CONFIG.fullAccessRoleId)
-    )
-  ) {
-    return true;
-  }
-
-  return Boolean(
-    member?.roles?.cache?.has(LEADER_ROLE_ID)
   );
 }
 
 // =====================================================
-// GELD
+// GELD UND DATUM
 // =====================================================
 
-function money(amount) {
-  return `${Number(amount || 0).toLocaleString("de-DE")}$`;
+function money(n) {
+  return `${Number(n || 0).toLocaleString("de-DE")}$`;
 }
 
-// =====================================================
-// BERLIN-DATUM
-// =====================================================
-
-function berlinParts() {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
+function berlinDateKey() {
   const p = Object.fromEntries(
-    parts.map((x) => [x.type, x.value])
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Berlin",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(new Date())
+      .map(x => [x.type, x.value])
   );
 
-  return {
-    year: Number(p.year),
-    month: Number(p.month),
-    day: Number(p.day),
-  };
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
-function dateKey(date) {
-  const year = date.getUTCFullYear();
-
-  const month = String(
-    date.getUTCMonth() + 1
-  ).padStart(2, "0");
-
-  const day = String(
-    date.getUTCDate()
-  ).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+function utcDate(key) {
+  return new Date(`${key}T00:00:00.000Z`);
 }
 
-function germanDate(date) {
-  const day = String(
-    date.getUTCDate()
-  ).padStart(2, "0");
+function iso(date) {
+  return date.toISOString().slice(0, 10);
+}
 
-  const month = String(
-    date.getUTCMonth() + 1
-  ).padStart(2, "0");
-
-  return `${day}.${month}.${date.getUTCFullYear()}`;
+function german(key) {
+  const [y, m, d] = key.split("-");
+  return `${d}.${m}.${y}`;
 }
 
 // =====================================================
 // SONNTAG BIS SONNTAG
 // =====================================================
 
-function getWeekRange() {
-  const p = berlinParts();
+function currentWeekRange() {
+  const today = utcDate(berlinDateKey());
 
-  const today = new Date(
-    Date.UTC(p.year, p.month - 1, p.day)
+  today.setUTCDate(
+    today.getUTCDate() - today.getUTCDay()
   );
 
-  const daysSinceSunday = today.getUTCDay();
-
-  const start = new Date(today);
-
-  start.setUTCDate(
-    start.getUTCDate() - daysSinceSunday
-  );
-
-  const end = new Date(start);
+  const end = new Date(today);
 
   end.setUTCDate(
     end.getUTCDate() + 7
   );
 
   return {
-    id: dateKey(start),
-    startDate: dateKey(start),
-    endDate: dateKey(end),
+    id: iso(today),
+    startDate: iso(today),
+    endDate: iso(end),
     period:
-      `${germanDate(start)} – ${germanDate(end)}`,
+      `${german(iso(today))} – ${german(iso(end))}`,
   };
 }
 
-function isWeekFinished(week) {
-  if (!week?.endDate) {
-    return false;
-  }
-
-  const p = berlinParts();
-
-  const today =
-    `${p.year}-` +
-    `${String(p.month).padStart(2, "0")}-` +
-    `${String(p.day).padStart(2, "0")}`;
-
-  return today >= week.endDate;
+function weekExpired(week) {
+  return Boolean(
+    week?.endDate &&
+    berlinDateKey() >= week.endDate
+  );
 }
 
 // =====================================================
@@ -192,13 +134,11 @@ function isWeekFinished(week) {
 // =====================================================
 
 function getState(data) {
-  if (!data.ccWeeklyDashboard) {
-    data.ccWeeklyDashboard = {
-      channelId: null,
-      messageId: null,
-      week: null,
-    };
-  }
+  data.ccWeeklyDashboard ||= {
+    channelId: null,
+    messageId: null,
+    week: null,
+  };
 
   return data.ccWeeklyDashboard;
 }
@@ -207,11 +147,11 @@ function getState(data) {
 // MITGLIEDERNAMEN
 // =====================================================
 
-function formatName(member) {
+function cleanName(member) {
   return String(
     member.displayName ||
     member.user?.username ||
-    "Unbekannt"
+    "Mitglied"
   )
     .replace(/^CC\s*I\s*/i, "")
     .replace(/@everyone|@here/gi, "Mitglied")
@@ -221,121 +161,111 @@ function formatName(member) {
 }
 
 // =====================================================
-// MITGLIEDER ÜBER REST LADEN
+// MITGLIEDER PER DISCORD REST LADEN
 // =====================================================
 
-async function listAllGuildMembers(guild) {
-  const result = new Map();
+async function listMembers(guild) {
+  const all = new Map();
 
   let after;
 
   while (true) {
     const batch = await guild.members.list({
       limit: 1000,
-      after,
+      ...(after ? { after } : {}),
     });
 
     if (!batch.size) {
       break;
     }
 
-    for (const member of batch.values()) {
-      result.set(member.id, member);
+    for (const [id, member] of batch) {
+      all.set(id, member);
     }
 
     if (batch.size < 1000) {
       break;
     }
 
-    const lastId = Array.from(
-      batch.keys()
-    ).at(-1);
+    const next = batch.lastKey();
 
-    if (!lastId || lastId === after) {
+    if (!next || next === after) {
       throw new Error(
-        "Mitgliederliste konnte nicht vollständig geladen werden."
+        "Mitglieder-Paginierung konnte nicht fortgesetzt werden."
       );
     }
 
-    after = lastId;
+    after = next;
   }
 
-  return result.values();
+  return all.values();
 }
 
 // =====================================================
-// NUR CC-FAMILIENROLLE ÜBERNEHMEN
+// NEUER MITGLIEDEREINTRAG
 // =====================================================
 
-async function syncWeekMembers(guild, week) {
-  const original = week.members || {};
+function newEntry(member) {
+  return {
+    name: cleanName(member),
+    status: "open",
 
-  const eligible = {};
+    paidAt: null,
+    paidBy: null,
 
-  const members = await listAllGuildMembers(guild);
+    excusedAt: null,
+    excusedBy: null,
+    excusedReason: null,
 
-  for (const member of members) {
+    sanctionId: null,
+  };
+}
 
-    // Bots nicht aufnehmen.
-    if (member.user?.bot) {
+// =====================================================
+// MITGLIEDER MIT ROLLE ABGLEICHEN
+// =====================================================
+
+async function synchronizeMembers(guild, week) {
+  const old = week.members || {};
+  const selected = {};
+
+  for (const member of await listMembers(guild)) {
+    if (
+      member.user?.bot ||
+      !member.roles.cache.has(MEMBER_ROLE_ID)
+    ) {
       continue;
     }
 
-    // WICHTIG:
-    // Nur Mitglieder mit der exakten Familienrolle.
-    if (!member.roles.cache.has(MEMBER_ROLE_ID)) {
+    // Keine neuen Mitglieder nach Ablauf
+    // der betreffenden Woche aufnehmen.
+    if (
+      !old[member.id] &&
+      weekExpired(week)
+    ) {
       continue;
     }
 
-    const existing = original[member.id];
-
-    // Keine neuen Personen rückwirkend in eine
-    // bereits abgelaufene Woche aufnehmen.
-    if (!existing && isWeekFinished(week)) {
-      continue;
-    }
-
-    if (existing) {
-      // Bereits gespeicherte Zahlungsdaten behalten.
-      eligible[member.id] = {
-        ...existing,
-        name: formatName(member),
-      };
-
-    } else {
-      // Neues berechtigtes Mitglied aufnehmen.
-      eligible[member.id] = {
-        name: formatName(member),
-        status: "open",
-
-        paidAt: null,
-        paidBy: null,
-
-        excusedAt: null,
-        excusedBy: null,
-        excusedReason: null,
-
-        sanctionId: null,
-      };
-    }
+    selected[member.id] = old[member.id]
+      ? {
+          ...old[member.id],
+          name: cleanName(member),
+        }
+      : newEntry(member);
   }
 
-  // Alle ohne die richtige Rolle werden entfernt.
-  const removed = Object.keys(original)
-    .filter((id) => !eligible[id])
-    .length;
-
-  // Neue Mitglieder zählen.
-  const added = Object.keys(eligible)
-    .filter((id) => !original[id])
-    .length;
-
-  week.members = eligible;
+  week.members = selected;
 
   return {
-    added,
-    removed,
-    total: Object.keys(eligible).length,
+    total: Object.keys(selected).length,
+
+    added: Object.keys(selected)
+      .filter(id => !old[id])
+      .length,
+
+    removed: Object.keys(old)
+      .filter(id => !selected[id])
+      .length,
   };
 }
 
@@ -343,19 +273,18 @@ async function syncWeekMembers(guild, week) {
 // NEUE WOCHE ERSTELLEN
 // =====================================================
 
-async function createWeek(guild) {
+async function makeWeek(guild) {
   const week = {
-    ...getWeekRange(),
+    ...currentWeekRange(),
 
     amount: WEEKLY_AMOUNT,
     penalty: PENALTY_AMOUNT,
 
     createdAt: Date.now(),
-
     members: {},
   };
 
-  await syncWeekMembers(guild, week);
+  await synchronizeMembers(guild, week);
 
   return week;
 }
@@ -364,12 +293,13 @@ async function createWeek(guild) {
 // MITGLIEDER NACH STATUS
 // =====================================================
 
-function membersByStatus(week, status) {
+function group(week, status) {
   return Object.entries(
-    week?.members || {}
+    week.members || {}
   )
     .filter(
-      ([, member]) => member.status === status
+      ([, member]) =>
+        member.status === status
     )
     .sort(
       (a, b) =>
@@ -380,68 +310,66 @@ function membersByStatus(week, status) {
     );
 }
 
-function formatMemberList(items, symbol) {
-  if (!items.length) {
+function displayGroup(entries, symbol) {
+  if (!entries.length) {
     return "┖ Niemand";
   }
 
-  let text = "";
+  let s = "";
 
-  for (let i = 0; i < items.length; i++) {
+  for (let i = 0; i < entries.length; i++) {
     const line =
-      `${i === items.length - 1 ? "┖" : "┃"} ` +
-      `${symbol} ${items[i][1].name}`;
+      `${i === entries.length - 1 ? "┖" : "┃"} ` +
+      `${symbol} ${entries[i][1].name}`;
 
-    if ((text + "\n" + line).length > 950) {
-      text +=
-        `\n… und ${items.length - i} weitere`;
+    if ((s + "\n" + line).length > 900) {
+      s +=
+        `\n… und ${entries.length - i} weitere`;
 
       break;
     }
 
-    text += (text ? "\n" : "") + line;
+    s += (s ? "\n" : "") + line;
   }
 
-  return text;
+  return s;
 }
 
 // =====================================================
-// WOCHENABGABEN-EMBED
+// WOCHENABGABEN EMBED
 // =====================================================
 
-function dashboardEmbed(week) {
-  const paid = membersByStatus(week, "paid");
-  const excused = membersByStatus(week, "excused");
-  const open = membersByStatus(week, "open");
-
-  const total = Object.keys(
-    week.members || {}
-  ).length;
+function panelEmbed(week) {
+  const paid = group(week, "paid");
+  const excused = group(week, "excused");
+  const open = group(week, "open");
 
   const lines = [
     `📅 **Woche:** ${week.period}`,
     "",
 
-    "💰 **Wochenabgabe**",
-    `┖ **${money(WEEKLY_AMOUNT)}**`,
+    `💰 **Wochenabgabe:** ${money(WEEKLY_AMOUNT)}`,
     "",
 
-    `👥 **Gesamt:** ${total}`,
+    `👥 **Gesamt:** ${
+      Object.keys(week.members || {}).length
+    }`,
+
     `✅ **Bezahlt:** ${paid.length}`,
     `🟡 **Entschuldigt:** ${excused.length}`,
     `❌ **Offen:** ${open.length}`,
     "",
 
     `✅ **Bezahlt (${paid.length})**`,
-    formatMemberList(paid, "✅"),
+    displayGroup(paid, "✅"),
     "",
 
     `🟡 **Entschuldigt (${excused.length})**`,
-    formatMemberList(excused, "🟡"),
+    displayGroup(excused, "🟡"),
     "",
 
     `❌ **Offen (${open.length})**`,
-    formatMemberList(open, "❌"),
+    displayGroup(open, "❌"),
   ];
 
   return new EmbedBuilder()
@@ -459,103 +387,183 @@ function dashboardEmbed(week) {
 }
 
 // =====================================================
-// VERWALTUNGSBUTTONS
+// BUTTON HILFSFUNKTION
 // =====================================================
 
-function dashboardButtons() {
+function button(id, label, emoji, style) {
+  return new ButtonBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setEmoji(emoji)
+    .setStyle(style);
+}
+
+// =====================================================
+// PANEL BUTTONS
+// =====================================================
+
+function panelButtons() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("ccw_paid")
-        .setLabel("Bezahlt markieren")
-        .setEmoji("✅")
-        .setStyle(ButtonStyle.Success),
+      button(
+        "ccw_paid",
+        "Bezahlt markieren",
+        "✅",
+        ButtonStyle.Success
+      ),
 
-      new ButtonBuilder()
-        .setCustomId("ccw_undo_paid")
-        .setLabel("Zahlung zurücknehmen")
-        .setEmoji("↩️")
-        .setStyle(ButtonStyle.Secondary)
+      button(
+        "ccw_undo_paid",
+        "Zahlung zurücknehmen",
+        "↩️",
+        ButtonStyle.Secondary
+      )
     ),
 
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("ccw_excuse")
-        .setLabel("Entschuldigen")
-        .setEmoji("🟡")
-        .setStyle(ButtonStyle.Primary),
+      button(
+        "ccw_excuse",
+        "Entschuldigen",
+        "🟡",
+        ButtonStyle.Primary
+      ),
 
-      new ButtonBuilder()
-        .setCustomId("ccw_undo_excuse")
-        .setLabel("Entschuldigung aufheben")
-        .setEmoji("↩️")
-        .setStyle(ButtonStyle.Secondary)
+      button(
+        "ccw_undo_excuse",
+        "Entschuldigung aufheben",
+        "↩️",
+        ButtonStyle.Secondary
+      )
     ),
 
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("ccw_sanction")
-        .setLabel("Offene sanktionieren")
-        .setEmoji("⚠️")
-        .setStyle(ButtonStyle.Danger),
+      button(
+        "ccw_sanction",
+        "Offene sanktionieren",
+        "⚠️",
+        ButtonStyle.Danger
+      ),
 
-      new ButtonBuilder()
-        .setCustomId("ccw_new_week")
-        .setLabel("Neue Woche starten")
-        .setEmoji("🔄")
-        .setStyle(ButtonStyle.Primary)
+      button(
+        "ccw_new_week",
+        "Neue Woche starten",
+        "🔄",
+        ButtonStyle.Primary
+      )
     ),
   ];
 }
 
 // =====================================================
-// DASHBOARD AKTUALISIEREN
+// PANEL NACHRICHT
 // =====================================================
 
-async function refreshDashboard(client, state) {
-  if (
-    !state.channelId ||
-    !state.messageId ||
-    !state.week
-  ) {
-    return false;
-  }
-
-  const channel = await client.channels
-    .fetch(state.channelId)
-    .catch(() => null);
-
-  const message = await channel?.messages
-    ?.fetch(state.messageId)
-    .catch(() => null);
-
-  if (!message) {
-    return false;
-  }
-
-  await message.edit({
+function panelPayload(week) {
+  return {
     embeds: [
-      dashboardEmbed(state.week),
+      panelEmbed(week),
     ],
-    components: dashboardButtons(),
-  });
 
-  return true;
+    components: panelButtons(),
+  };
 }
 
 // =====================================================
-// DASHBOARD SENDEN / MITGLIEDER AKTUALISIEREN
+// DASHBOARD SICHER AKTUALISIEREN
 // =====================================================
 
-async function sendDashboard(client, interaction) {
-  if (!isLeader(interaction.member)) {
-    await safeReply(interaction, {
+async function refreshPanel(client, state) {
+  if (!state.week) {
+    return {
+      ok: false,
+      reason: "Keine Woche gespeichert.",
+    };
+  }
+
+  if (
+    !state.channelId ||
+    !state.messageId
+  ) {
+    return {
+      ok: false,
+      missing: true,
+      reason:
+        "Panel-Kanal oder Nachrichten-ID fehlt.",
+    };
+  }
+
+  try {
+    // Kanal laden.
+    const channel = await client.channels.fetch(
+      state.channelId
+    );
+
+    if (!channel?.messages) {
+      throw new Error(
+        "Kanal ist kein lesbarer Textkanal."
+      );
+    }
+
+    // Gespeicherte Nachricht laden.
+    const message = await channel.messages.fetch(
+      state.messageId
+    );
+
+    // Nur Nachrichten des eigenen Bots bearbeiten.
+    if (message.author?.id !== client.user.id) {
+      throw new Error(
+        "Die gespeicherte Nachricht stammt nicht von diesem Bot."
+      );
+    }
+
+    // Inhalt und Buttons aktualisieren.
+    await message.edit(
+      panelPayload(state.week)
+    );
+
+    return {
+      ok: true,
+    };
+
+  } catch (error) {
+    const missing = [
+      10003,
+      10008,
+    ].includes(Number(error.code));
+
+    // WICHTIG:
+    // Fehler nicht mehr verschlucken.
+    console.error(
+      "❌ CC-Wochenabgabe: Panel konnte nicht aktualisiert werden:",
+      {
+        channelId: state.channelId,
+        messageId: state.messageId,
+        code: error.code,
+        message: error.message,
+      }
+    );
+
+    return {
+      ok: false,
+      missing,
+      reason: String(
+        error.message || error
+      ),
+    };
+  }
+}
+
+// =====================================================
+// PANEL VERÖFFENTLICHEN ODER REPARIEREN
+// =====================================================
+
+async function postPanel(client, interaction) {
+  if (!hasManagementRole(interaction.member)) {
+    return safeReply(interaction, {
       content:
-        "❌ Nur die Leaderschaft darf die Wochenabgabe verwalten.",
+        "❌ Keine Berechtigung für Wochenabgaben.",
       ephemeral: true,
     });
-
-    return;
   }
 
   await interaction.deferReply({
@@ -569,103 +577,110 @@ async function sendDashboard(client, interaction) {
 
   try {
     if (!state.week) {
-      // Neue Wochenübersicht.
-      state.week = await createWeek(
+      state.week = await makeWeek(
         interaction.guild
       );
 
       changes = {
-        added: Object.keys(
-          state.week.members
-        ).length,
-        removed: 0,
         total: Object.keys(
           state.week.members
         ).length,
+        added: 0,
+        removed: 0,
       };
 
     } else {
-      // WICHTIG:
-      // Auch die bereits gespeicherte Woche
-      // erneut mit der aktuellen Rollenliste abgleichen.
-      changes = await syncWeekMembers(
+      changes = await synchronizeMembers(
         interaction.guild,
         state.week
       );
     }
+
   } catch (error) {
     console.error(
-      "❌ CC-Wochenabgabe: Mitglieder konnten nicht geladen werden:",
+      "❌ CC-Wochenabgabe: Mitglieder laden:",
       error
     );
 
-    await interaction.editReply(
-      "❌ Die Mitgliederrollen konnten nicht geprüft werden. Bitte erneut versuchen."
+    return interaction.editReply(
+      "❌ Mitglieder konnten nicht geladen werden. Siehe Railway-Logs."
     );
-
-    return;
   }
 
   saveData(data);
 
-  // Bereits vorhandenes Panel aktualisieren.
+  // ===================================================
+  // VORHANDENES PANEL AKTUALISIEREN
+  // ===================================================
+
   if (
     state.channelId === interaction.channelId &&
-    await refreshDashboard(
+    state.messageId
+  ) {
+    const result = await refreshPanel(
       client,
       state
-    ).catch(() => false)
-  ) {
-    await interaction.editReply(
-      `✅ Wochenübersicht aktualisiert!\n` +
-      `👥 Mitglieder mit Familienrolle: **${changes.total}**\n` +
-      `➕ Neu aufgenommen: **${changes.added}**\n` +
-      `➖ Ohne Rolle entfernt: **${changes.removed}**`
     );
 
-    return;
+    if (result.ok) {
+      return interaction.editReply(
+        `✅ Panel aktualisiert.\n` +
+        `👥 Mitglieder: ${changes.total}\n` +
+        `➕ Neu: ${changes.added}\n` +
+        `➖ Entfernt: ${changes.removed}`
+      );
+    }
+
+    // Bei Berechtigungsfehlern nicht unkontrolliert
+    // weitere Panels posten.
+    if (!result.missing) {
+      return interaction.editReply(
+        `❌ Panel konnte nicht bearbeitet werden: ` +
+        `${result.reason.slice(0, 250)}.\n` +
+        "Prüfe die Bot-Rechte. Die Woche wurde nicht zurückgesetzt."
+      );
+    }
   }
 
-  // Neues Panel posten.
+  // ===================================================
+  // PANEL FEHLT: WIEDERHERSTELLEN
+  // ===================================================
+
   const message = await sendToChannel(
     client,
     interaction.channelId,
-    {
-      embeds: [
-        dashboardEmbed(state.week),
-      ],
-      components: dashboardButtons(),
-    }
+    panelPayload(state.week)
   );
 
   if (!message) {
-    await interaction.editReply(
-      "❌ Panel konnte nicht gepostet werden. Prüfe die Bot-Rechte im Kanal."
+    return interaction.editReply(
+      "❌ Panel konnte nicht gepostet werden. Prüfe die Railway-Logs."
     );
-
-    return;
   }
 
+  // Neue Nachrichten-ID sichern.
   state.channelId = interaction.channelId;
   state.messageId = message.id;
 
   saveData(data);
 
-  await interaction.editReply(
-    `✅ Wochenübersicht in <#${state.channelId}> veröffentlicht.`
+  return interaction.editReply(
+    "✅ Wochenabgabenpanel veröffentlicht.\n" +
+    "Die aktuelle Woche und alle Zahlungen bleiben erhalten."
   );
 }
 
 // =====================================================
-// MITGLIED AUSWÄHLEN
+// MITGLIEDERAUSWAHL
 // =====================================================
 
-function memberSelect(action) {
-  const placeholders = {
+function selectMenu(action) {
+  const labels = {
     paid: "Wen als bezahlt markieren?",
     undo_paid: "Bei wem Zahlung zurücknehmen?",
     excuse: "Wen entschuldigen?",
-    undo_excuse: "Bei wem Entschuldigung aufheben?",
+    undo_excuse:
+      "Bei wem Entschuldigung aufheben?",
   };
 
   return new ActionRowBuilder().addComponents(
@@ -674,7 +689,7 @@ function memberSelect(action) {
         `${PREFIX}member_${action}`
       )
       .setPlaceholder(
-        placeholders[action] ||
+        labels[action] ||
         "Mitglied auswählen"
       )
       .setMinValues(1)
@@ -708,7 +723,7 @@ function excuseModal(userId) {
 // ZAHLUNGEN UND ENTSCHULDIGUNGEN
 // =====================================================
 
-async function selectMemberAction(
+async function editMember(
   client,
   interaction,
   action
@@ -716,98 +731,96 @@ async function selectMemberAction(
   const data = loadData();
   const state = getState(data);
 
-  const targetId = interaction.values?.[0];
+  const id = interaction.values?.[0];
+  const entry = state.week?.members?.[id];
 
-  const record = state.week?.members?.[targetId];
-
-  if (!record) {
-    await safeReply(interaction, {
+  if (!entry) {
+    return safeReply(interaction, {
       content:
-        "❌ Mitglied gehört nicht zur aktuellen Wochenübersicht.",
+        "❌ Mitglied gehört nicht zur aktuellen Woche. Bitte Panel aktualisieren.",
       ephemeral: true,
     });
-
-    return;
   }
 
   if (action === "excuse") {
-    if (record.status === "paid") {
-      await safeReply(interaction, {
+    if (entry.status === "paid") {
+      return safeReply(interaction, {
         content:
-          "❌ Zahlung erst zurücknehmen, bevor das Mitglied entschuldigt wird.",
+          "❌ Zahlung zuerst zurücknehmen.",
         ephemeral: true,
       });
-
-      return;
     }
 
-    await interaction.showModal(
-      excuseModal(targetId)
+    return interaction.showModal(
+      excuseModal(id)
     );
-
-    return;
   }
 
-  if (action === "paid") {
-    record.status = "paid";
-
-    record.paidAt = Date.now();
-    record.paidBy = interaction.user.id;
-
-    record.excusedAt = null;
-    record.excusedBy = null;
-    record.excusedReason = null;
-
-  } else if (action === "undo_paid") {
-    if (record.status !== "paid") {
-      await safeReply(interaction, {
-        content:
-          "❌ Mitglied ist nicht als bezahlt markiert.",
-        ephemeral: true,
-      });
-
-      return;
-    }
-
-    record.status = "open";
-
-    record.paidAt = null;
-    record.paidBy = null;
-
-  } else if (action === "undo_excuse") {
-    if (record.status !== "excused") {
-      await safeReply(interaction, {
-        content:
-          "❌ Mitglied ist nicht entschuldigt.",
-        ephemeral: true,
-      });
-
-      return;
-    }
-
-    record.status = "open";
-
-    record.excusedAt = null;
-    record.excusedBy = null;
-    record.excusedReason = null;
-
-  } else {
-    return;
-  }
-
-  saveData(data);
-
-  const updated = await refreshDashboard(
-    client,
-    state
-  ).catch(() => false);
-
-  await safeReply(interaction, {
-    content: updated
-      ? "✅ Wochenübersicht aktualisiert."
-      : "✅ Gespeichert, aber die Panel-Nachricht konnte nicht aktualisiert werden.",
+  // Discord-Interaktion frühzeitig bestätigen.
+  await interaction.deferReply({
     ephemeral: true,
   });
+
+  if (action === "paid") {
+    entry.status = "paid";
+
+    entry.paidAt = Date.now();
+    entry.paidBy = interaction.user.id;
+
+    entry.excusedAt = null;
+    entry.excusedBy = null;
+    entry.excusedReason = null;
+
+  } else if (action === "undo_paid") {
+    if (entry.status !== "paid") {
+      return interaction.editReply(
+        "❌ Mitglied ist nicht als bezahlt markiert."
+      );
+    }
+
+    entry.status = "open";
+    entry.paidAt = null;
+    entry.paidBy = null;
+
+  } else if (action === "undo_excuse") {
+    if (entry.status !== "excused") {
+      return interaction.editReply(
+        "❌ Mitglied ist nicht entschuldigt."
+      );
+    }
+
+    entry.status = "open";
+
+    entry.excusedAt = null;
+    entry.excusedBy = null;
+    entry.excusedReason = null;
+
+  } else {
+    return interaction.editReply(
+      "❌ Unbekannte Aktion."
+    );
+  }
+
+  // Zahlung zuerst dauerhaft speichern.
+  saveData(data);
+
+  const result = await refreshPanel(
+    client,
+    state
+  );
+
+  if (result.ok) {
+    return interaction.editReply(
+      "✅ Gespeichert und Wochenübersicht aktualisiert."
+    );
+  }
+
+  return interaction.editReply(
+    "✅ Zahlung gespeichert.\n" +
+    `⚠️ Panel nicht aktualisiert: ` +
+    `${result.reason.slice(0, 250)}.\n` +
+    "Führe /wochenabgabe-panel im Abgabenkanal aus, um es zu reparieren."
+  );
 }
 
 // =====================================================
@@ -817,21 +830,22 @@ async function selectMemberAction(
 async function submitExcuse(
   client,
   interaction,
-  userId
+  id
 ) {
   const data = loadData();
   const state = getState(data);
 
-  const record = state.week?.members?.[userId];
+  const entry = state.week?.members?.[id];
 
-  if (!record || record.status === "paid") {
-    await safeReply(interaction, {
+  if (
+    !entry ||
+    entry.status === "paid"
+  ) {
+    return safeReply(interaction, {
       content:
-        "❌ Mitglied nicht gefunden oder bereits bezahlt.",
+        "❌ Mitglied nicht vorhanden oder bereits bezahlt.",
       ephemeral: true,
     });
-
-    return;
   }
 
   const reason = interaction.fields
@@ -839,45 +853,53 @@ async function submitExcuse(
     .trim();
 
   if (!reason) {
-    await safeReply(interaction, {
+    return safeReply(interaction, {
       content:
-        "❌ Bitte einen Grund eingeben.",
+        "❌ Bitte Grund angeben.",
       ephemeral: true,
     });
-
-    return;
   }
 
-  record.status = "excused";
+  await interaction.deferReply({
+    ephemeral: true,
+  });
 
-  record.excusedAt = Date.now();
-  record.excusedBy = interaction.user.id;
-  record.excusedReason = reason.slice(0, 300);
+  entry.status = "excused";
+
+  entry.excusedAt = Date.now();
+  entry.excusedBy = interaction.user.id;
+  entry.excusedReason = reason.slice(0, 300);
 
   saveData(data);
 
-  const updated = await refreshDashboard(
+  const result = await refreshPanel(
     client,
     state
-  ).catch(() => false);
+  );
 
-  await safeReply(interaction, {
-    content: updated
-      ? "✅ Mitglied entschuldigt."
-      : "✅ Entschuldigt, Panel konnte nicht aktualisiert werden.",
-    ephemeral: true,
-  });
+  if (result.ok) {
+    return interaction.editReply(
+      "✅ Entschuldigt und Wochenübersicht aktualisiert."
+    );
+  }
+
+  return interaction.editReply(
+    "✅ Entschuldigt.\n" +
+    `⚠️ Panel nicht aktualisiert: ` +
+    `${result.reason.slice(0, 250)}.\n` +
+    "Mit /wochenabgabe-panel kannst du die Übersicht reparieren."
+  );
 }
 
 // =====================================================
-// WOCHENABGABEN-SANKTION
+// WOCHENABGABEN-SANKTION ERSTELLEN
 // =====================================================
 
-function makeWeeklySanction(
+function newSanction(
   userId,
   member,
   week,
-  issuerId
+  creatorId
 ) {
   const now = Date.now();
 
@@ -885,19 +907,18 @@ function makeWeeklySanction(
     `ccw${now.toString(36)}` +
     `${Math.random().toString(36).slice(2, 6)}`;
 
-  const reason =
-    `Wochenabgabe nicht bezahlt (${week.period})`;
-
   return {
     id,
 
     targetId: userId,
     targetName: member.name,
-    creatorId: issuerId,
+    creatorId,
 
     items: [
       {
-        reason,
+        reason:
+          `Wochenabgabe nicht bezahlt (${week.period})`,
+
         amount: PENALTY_AMOUNT,
         special: null,
         note: null,
@@ -906,7 +927,6 @@ function makeWeeklySanction(
     ],
 
     totalAmount: PENALTY_AMOUNT,
-
     status: "open",
     createdAt: now,
 
@@ -928,103 +948,106 @@ function makeWeeklySanction(
 }
 
 // =====================================================
-// SANKTION IM SANKTIONSKANAL POSTEN
+// SANKTION VERÖFFENTLICHEN
 // =====================================================
 
-async function postWeeklySanction(
+async function publishSanction(
   client,
   sanction
 ) {
-  const deadline = Math.floor(
+  const due = Math.floor(
     sanction.dueAt / 1000
   );
 
-  const message = await sendToChannel(
+  const embed = new EmbedBuilder()
+    .setColor(
+      CONFIG.warningColor || 0xf1c40f
+    )
+    .setTitle("🚫 SANKTION 🚫")
+    .addFields(
+      {
+        name: "Name",
+        value: `<@${sanction.targetId}>`,
+      },
+      {
+        name: "Sanktion",
+        value:
+          `**${sanction.items[0].reason}**\n` +
+          `┖ ${money(PENALTY_AMOUNT)}`,
+      },
+      {
+        name: "Zu bezahlen",
+        value:
+          `**${money(PENALTY_AMOUNT)}**`,
+        inline: true,
+      },
+      {
+        name: "Sonderstrafe",
+        value: "Keine",
+        inline: true,
+      },
+      {
+        name: "Zeitraum",
+        value:
+          `Frist: <t:${due}:F>\n` +
+          `Restzeit: <t:${due}:R>`,
+      },
+      {
+        name: "Ausgestellt von",
+        value: `<@${sanction.creatorId}>`,
+        inline: true,
+      },
+      {
+        name: "Status",
+        value: "⏳ Offen",
+        inline: true,
+      }
+    )
+    .setFooter({
+      text:
+        `${CONFIG.shortName || "CC"} • ` +
+        `Sanktions-ID: ${sanction.id}`,
+    });
+
+  const components = [
+    new ActionRowBuilder().addComponents(
+      button(
+        `sanction_paid_${sanction.id}`,
+        "Bezahlt markieren",
+        "✅",
+        ButtonStyle.Success
+      ),
+      button(
+        `sanction_cancel_${sanction.id}`,
+        "Stornieren",
+        "❌",
+        ButtonStyle.Danger
+      )
+    ),
+  ];
+
+  const msg = await sendToChannel(
     client,
     CONFIG.sanctionChannelId,
     {
       content: `<@${sanction.targetId}>`,
 
       allowedMentions: {
-        users: [sanction.targetId],
+        users: [
+          sanction.targetId,
+        ],
       },
 
-      embeds: [
-        new EmbedBuilder()
-          .setColor(CONFIG.warningColor)
-          .setTitle("🚫 SANKTION 🚫")
-          .addFields(
-            {
-              name: "Name",
-              value: `<@${sanction.targetId}>`,
-            },
-            {
-              name: "Sanktion",
-              value:
-                `**${sanction.items[0].reason}**\n` +
-                `┖ ${money(PENALTY_AMOUNT)}`,
-            },
-            {
-              name: "Zu bezahlen",
-              value:
-                `**${money(PENALTY_AMOUNT)}**`,
-              inline: true,
-            },
-            {
-              name: "Sonderstrafe",
-              value: "Keine",
-              inline: true,
-            },
-            {
-              name: "Zeitraum",
-              value:
-                `Frist: <t:${deadline}:F>\n` +
-                `Restzeit: <t:${deadline}:R>`,
-            },
-            {
-              name: "Ausgestellt von",
-              value: `<@${sanction.creatorId}>`,
-              inline: true,
-            },
-            {
-              name: "Status",
-              value: "⏳ Offen",
-              inline: true,
-            }
-          )
-          .setFooter({
-            text:
-              `${CONFIG.shortName || "CC"} • Sanktions-ID: ${sanction.id}`,
-          }),
-      ],
-
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(
-              `sanction_paid_${sanction.id}`
-            )
-            .setEmoji("✅")
-            .setLabel("Bezahlt markieren")
-            .setStyle(ButtonStyle.Success),
-
-          new ButtonBuilder()
-            .setCustomId(
-              `sanction_cancel_${sanction.id}`
-            )
-            .setEmoji("❌")
-            .setLabel("Stornieren")
-            .setStyle(ButtonStyle.Danger)
-        ),
-      ],
+      embeds: [embed],
+      components,
     }
   );
 
-  if (!message) {
+  if (!msg) {
     return false;
   }
 
-  sanction.messageId = message.id;
+  sanction.messageId = msg.id;
 
   return true;
 }
@@ -1033,26 +1056,24 @@ async function postWeeklySanction(
 // OFFENE WOCHENABGABEN SANKTIONIEREN
 // =====================================================
 
-async function sanctionOpenMembers(
+async function sanctionOpen(
   client,
   interaction,
   weekId
 ) {
-  if (activeSanctionRuns.has(interaction.guildId)) {
-    await safeReply(interaction, {
+  if (sanctionRuns.has(interaction.guildId)) {
+    return safeReply(interaction, {
       content:
-        "⏳ Eine Sanktionierung läuft bereits.",
+        "⏳ Die Sanktionierung läuft bereits.",
       ephemeral: true,
     });
-
-    return;
   }
 
   await interaction.deferReply({
     ephemeral: true,
   });
 
-  activeSanctionRuns.add(
+  sanctionRuns.add(
     interaction.guildId
   );
 
@@ -1061,110 +1082,105 @@ async function sanctionOpenMembers(
     const state = getState(data);
     const week = state.week;
 
-    if (!week || week.id !== weekId) {
-      await interaction.editReply(
-        "❌ Die Woche wurde inzwischen gewechselt."
+    if (
+      !week ||
+      week.id !== weekId
+    ) {
+      return interaction.editReply(
+        "❌ Die Woche hat sich geändert."
       );
-
-      return;
     }
 
-    if (!isWeekFinished(week)) {
-      await interaction.editReply(
-        "❌ Sanktionen sind erst nach Ablauf der Wochenfrist möglich."
+    if (!weekExpired(week)) {
+      return interaction.editReply(
+        "❌ Die Frist ist noch nicht abgelaufen."
       );
-
-      return;
     }
 
-    // WICHTIG:
-    // Vor der Sanktionierung die aktuellen Rollen
-    // erneut überprüfen.
+    // Rollen vor Sanktionierung kontrollieren.
     try {
-      await syncWeekMembers(
+      await synchronizeMembers(
         interaction.guild,
         week
       );
 
       saveData(data);
+
     } catch (error) {
       console.error(
-        "❌ Rollenprüfung vor Sanktionierung:",
+        "❌ Wochenabgabe: Rollenprüfung vor Sanktionen:",
         error
       );
 
-      await interaction.editReply(
-        "❌ Rollenprüfung fehlgeschlagen. Keine Sanktionen versendet."
+      return interaction.editReply(
+        "❌ Rollenprüfung fehlgeschlagen. Keine Sanktionen gesendet."
       );
-
-      return;
     }
 
     const targets = Object.entries(
       week.members
     ).filter(
-      ([, member]) =>
-        member.status === "open" &&
-        !member.sanctionId
+      ([, e]) =>
+        e.status === "open" &&
+        !e.sanctionId
     );
 
     if (!targets.length) {
-      await interaction.editReply(
-        "ℹ️ Keine offenen, unbestraften Wochenabgaben vorhanden."
+      return interaction.editReply(
+        "ℹ️ Keine offenen, unbestraften Abgaben."
       );
-
-      return;
     }
 
-    let successCount = 0;
-    let failCount = 0;
+    let ok = 0;
+    let failed = 0;
 
-    for (const [userId, member] of targets) {
-      const sanction = makeWeeklySanction(
-        userId,
+    for (const [id, member] of targets) {
+      const sanction = newSanction(
+        id,
         member,
         week,
         interaction.user.id
       );
 
-      const success = await postWeeklySanction(
-        client,
-        sanction
-      );
-
-      if (!success) {
-        failCount++;
+      if (
+        !await publishSanction(
+          client,
+          sanction
+        )
+      ) {
+        failed++;
         continue;
       }
 
-      if (!data.sanctions) {
-        data.sanctions = {};
-      }
+      data.sanctions ||= {};
 
-      data.sanctions[sanction.id] = sanction;
+      data.sanctions[sanction.id] =
+        sanction;
 
       member.sanctionId = sanction.id;
 
-      // Jede Sanktion einzeln speichern.
       saveData(data);
 
-      successCount++;
+      ok++;
     }
 
-    await refreshDashboard(
+    await refreshPanel(
       client,
       state
-    ).catch(console.error);
+    );
 
-    await interaction.editReply(
-      `✅ **${successCount}** Sanktion(en) zu je **${money(PENALTY_AMOUNT)}** erstellt.` +
-      (failCount
-        ? ` ⚠️ ${failCount} fehlgeschlagen.`
-        : "")
+    return interaction.editReply(
+      `✅ ${ok} Sanktion(en) zu je ` +
+      `${money(PENALTY_AMOUNT)} erstellt.` +
+      (
+        failed
+          ? ` ⚠️ ${failed} fehlgeschlagen.`
+          : ""
+      )
     );
 
   } finally {
-    activeSanctionRuns.delete(
+    sanctionRuns.delete(
       interaction.guildId
     );
   }
@@ -1174,7 +1190,7 @@ async function sanctionOpenMembers(
 // NEUE WOCHE STARTEN
 // =====================================================
 
-async function startNewWeek(
+async function newWeek(
   client,
   interaction
 ) {
@@ -1184,33 +1200,31 @@ async function startNewWeek(
 
   const data = loadData();
   const state = getState(data);
-  const range = getWeekRange();
 
-  if (state.week?.id === range.id) {
-    await interaction.editReply(
-      "ℹ️ Die Wochenübersicht ist bereits aktuell. Kein doppelter Reset."
+  if (
+    state.week?.id === currentWeekRange().id
+  ) {
+    return interaction.editReply(
+      "ℹ️ Die Woche ist bereits aktuell. Kein doppelter Reset."
     );
-
-    return;
   }
 
-  let nextWeek;
+  let week;
 
   try {
-    nextWeek = await createWeek(
+    week = await makeWeek(
       interaction.guild
     );
+
   } catch (error) {
     console.error(
-      "❌ Neue Woche konnte nicht erstellt werden:",
+      "❌ Wochenabgabe: Neue Woche:",
       error
     );
 
-    await interaction.editReply(
+    return interaction.editReply(
       "❌ Mitglieder konnten nicht geladen werden."
     );
-
-    return;
   }
 
   // Alte Woche archivieren.
@@ -1226,36 +1240,46 @@ async function startNewWeek(
       data.ccWeeklyHistory.slice(0, 52);
   }
 
-  state.week = nextWeek;
+  state.week = week;
 
   saveData(data);
 
-  const updated = await refreshDashboard(
+  const result = await refreshPanel(
     client,
     state
-  ).catch(() => false);
+  );
 
-  await interaction.editReply(
-    updated
-      ? `✅ Neue CC-Woche **${nextWeek.period}** gestartet.`
-      : "✅ Neue Woche gespeichert. Bitte /wochenabgabe-panel erneut ausführen."
+  if (result.ok) {
+    return interaction.editReply(
+      `✅ Neue Woche ${week.period} gestartet.`
+    );
+  }
+
+  return interaction.editReply(
+    "✅ Neue Woche gespeichert.\n" +
+    `⚠️ Panel-Aktualisierung fehlgeschlagen: ` +
+    `${result.reason.slice(0, 200)}.`
   );
 }
 
 // =====================================================
-// INTERACTION-HANDLER
+// HAUPT-HANDLER
 // =====================================================
 
 async function handleWeeklyPaymentInteraction(
   client,
   interaction
 ) {
-  // Slash-Command.
+  // ===================================================
+  // SLASH COMMAND
+  // ===================================================
+
   if (
     interaction.isChatInputCommand() &&
-    interaction.commandName === "wochenabgabe-panel"
+    interaction.commandName ===
+      "wochenabgabe-panel"
   ) {
-    await sendDashboard(
+    await postPanel(
       client,
       interaction
     );
@@ -1263,7 +1287,10 @@ async function handleWeeklyPaymentInteraction(
     return true;
   }
 
-  // Alte Panels.
+  // ===================================================
+  // ALTE PANELBUTTONS
+  // ===================================================
+
   if (
     interaction.isButton() &&
     [
@@ -1273,7 +1300,7 @@ async function handleWeeklyPaymentInteraction(
   ) {
     await safeReply(interaction, {
       content:
-        "ℹ️ Die Wochenabgabe wird über /wochenabgabe-panel von der Leaderschaft verwaltet.",
+        "ℹ️ Nutze /wochenabgabe-panel.",
       ephemeral: true,
     });
 
@@ -1281,16 +1308,21 @@ async function handleWeeklyPaymentInteraction(
   }
 
   if (
-    !(interaction.customId || "").startsWith(PREFIX)
+    !String(
+      interaction.customId || ""
+    ).startsWith(PREFIX)
   ) {
     return false;
   }
 
-  // Ausschließlich Leaderschaft.
-  if (!isLeader(interaction.member)) {
+  // ===================================================
+  // BERECHTIGUNGSKONTROLLE
+  // ===================================================
+
+  if (!hasManagementRole(interaction.member)) {
     await safeReply(interaction, {
       content:
-        "❌ Nur die Leaderschaft darf die Wochenabgabe bedienen.",
+        "❌ Nur Leaderschaft, Wochenabgabenverwaltung und Vollzugriff dürfen dies benutzen.",
       ephemeral: true,
     });
 
@@ -1304,7 +1336,6 @@ async function handleWeeklyPaymentInteraction(
   if (interaction.isButton()) {
     const id = interaction.customId;
 
-    // Bezahlen / Entschuldigen.
     if (
       [
         "ccw_paid",
@@ -1313,39 +1344,32 @@ async function handleWeeklyPaymentInteraction(
         "ccw_undo_excuse",
       ].includes(id)
     ) {
-      const state = getState(
-        loadData()
-      );
-
-      if (!state.week) {
+      if (!getState(loadData()).week) {
         await safeReply(interaction, {
           content:
-            "❌ Es wurde noch keine Woche erstellt.",
+            "❌ Noch keine Woche erstellt.",
           ephemeral: true,
         });
 
-        return true;
+      } else {
+        await safeReply(interaction, {
+          content:
+            "Wähle das Mitglied aus:",
+
+          components: [
+            selectMenu(id.slice(4)),
+          ],
+
+          ephemeral: true,
+        });
       }
-
-      await safeReply(interaction, {
-        content:
-          "Wähle das Mitglied aus:",
-
-        components: [
-          memberSelect(
-            id.slice(4)
-          ),
-        ],
-
-        ephemeral: true,
-      });
 
       return true;
     }
 
-    // Neue Woche starten.
+    // Neue Woche.
     if (id === "ccw_new_week") {
-      await startNewWeek(
+      await newWeek(
         client,
         interaction
       );
@@ -1353,7 +1377,7 @@ async function handleWeeklyPaymentInteraction(
       return true;
     }
 
-    // Offene Mitglieder sanktionieren.
+    // Offene Sanktionen.
     if (id === "ccw_sanction") {
       await interaction.deferReply({
         ephemeral: true,
@@ -1365,42 +1389,41 @@ async function handleWeeklyPaymentInteraction(
 
       if (!week) {
         await interaction.editReply(
-          "❌ Noch keine Wochenübersicht vorhanden."
+          "❌ Keine Woche vorhanden."
         );
 
         return true;
       }
 
-      if (!isWeekFinished(week)) {
+      if (!weekExpired(week)) {
         await interaction.editReply(
-          "❌ Sanktionen sind erst nach Ablauf der Woche möglich."
+          "❌ Woche noch nicht abgelaufen."
         );
 
         return true;
       }
 
-      // Vor Bestätigung aktuelle Rollen überprüfen.
       try {
-        await syncWeekMembers(
+        await synchronizeMembers(
           interaction.guild,
           week
         );
 
         saveData(data);
 
-        await refreshDashboard(
+        await refreshPanel(
           client,
           state
-        ).catch(() => false);
+        );
 
       } catch (error) {
         console.error(
-          "❌ Rollenprüfung:",
+          "❌ Wochenabgabe: Rollenprüfung:",
           error
         );
 
         await interaction.editReply(
-          "❌ Die Mitgliederrollen konnten nicht geprüft werden. Keine Sanktionen erstellt."
+          "❌ Rollenprüfung fehlgeschlagen; keine Sanktionen gesendet."
         );
 
         return true;
@@ -1409,14 +1432,14 @@ async function handleWeeklyPaymentInteraction(
       const count = Object.values(
         week.members
       ).filter(
-        (member) =>
-          member.status === "open" &&
-          !member.sanctionId
+        e =>
+          e.status === "open" &&
+          !e.sanctionId
       ).length;
 
       if (!count) {
         await interaction.editReply(
-          "ℹ️ Keine offenen, unbestraften Wochenabgaben vorhanden."
+          "ℹ️ Keine offenen, unbestraften Abgaben."
         );
 
         return true;
@@ -1424,26 +1447,25 @@ async function handleWeeklyPaymentInteraction(
 
       await interaction.editReply({
         content:
-          `⚠️ Wirklich **${count}** offene Wochenabgaben ` +
-          `mit jeweils **${money(PENALTY_AMOUNT)}** sanktionieren?`,
+          `⚠️ Wirklich ${count} offene ` +
+          `Wochenabgaben zu je ` +
+          `${money(PENALTY_AMOUNT)} sanktionieren?`,
 
         components: [
           new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(
-                `ccw_confirm_${week.id}`
-              )
-              .setLabel(
-                "Ja, Sanktionen erstellen"
-              )
-              .setStyle(ButtonStyle.Danger),
+            button(
+              `ccw_confirm_${week.id}`,
+              "Ja, Sanktionen erstellen",
+              "⚠️",
+              ButtonStyle.Danger
+            ),
 
-            new ButtonBuilder()
-              .setCustomId(
-                "ccw_cancel_confirm"
-              )
-              .setLabel("Abbrechen")
-              .setStyle(ButtonStyle.Secondary)
+            button(
+              "ccw_cancel_confirm",
+              "Abbrechen",
+              "↩️",
+              ButtonStyle.Secondary
+            )
           ),
         ],
       });
@@ -1451,23 +1473,27 @@ async function handleWeeklyPaymentInteraction(
       return true;
     }
 
-    // Sanktionierung abbrechen.
+    // Bestätigung abbrechen.
     if (id === "ccw_cancel_confirm") {
       await interaction.update({
         content:
-          "✅ Sanktionierung abgebrochen.",
+          "✅ Abgebrochen.",
         components: [],
       });
 
       return true;
     }
 
-    // Sanktionierung bestätigen.
-    if (id.startsWith("ccw_confirm_")) {
-      await sanctionOpenMembers(
+    // Sanktionen bestätigen.
+    if (
+      id.startsWith("ccw_confirm_")
+    ) {
+      await sanctionOpen(
         client,
         interaction,
-        id.slice("ccw_confirm_".length)
+        id.slice(
+          "ccw_confirm_".length
+        )
       );
 
       return true;
@@ -1484,7 +1510,7 @@ async function handleWeeklyPaymentInteraction(
       "ccw_member_"
     )
   ) {
-    await selectMemberAction(
+    await editMember(
       client,
       interaction,
       interaction.customId.slice(
@@ -1496,7 +1522,7 @@ async function handleWeeklyPaymentInteraction(
   }
 
   // ===================================================
-  // ENTSCHULDIGUNGSFORMULAR
+  // ENTSCHULDIGUNG
   // ===================================================
 
   if (
