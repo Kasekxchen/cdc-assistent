@@ -8,7 +8,6 @@ const {
   TextInputBuilder,
   TextInputStyle,
   ChannelType,
-  PermissionFlagsBits,
 } = require("discord.js");
 
 const CONFIG = require("../config");
@@ -16,29 +15,64 @@ const { loadData, saveData } = require("../utils/dataStore");
 const { sendToChannel, safeReply } = require("../utils/discord");
 
 // =====================================================
-// CC SERVER-INFOS | AUTOMATISCHE SPRACHKANAELE
+// CC SERVER-INFOS
+// =====================================================
+//
+// WICHTIG:
+// - KEINE neuen Sprachkanäle erstellen.
+// - KEINE neue Kategorie erstellen.
+// - Vorhandene Kanäle erkennen und wiederverwenden.
+// - Nur Änderungen an Kanalnamen vornehmen.
 // =====================================================
 
-const LEADER_ROLE_ID = "1542602740784562234";
-const MEMBER_ROLE_ID = "1542602740771983553";
-const HANGAROUND_ROLE_ID = "1568852155543191603";
+const LEADER_IDS = [
+  "1542602740784562234",
+  "1568850050312831118",
+];
 
-const CATEGORY_NAME = "📊・CC INFORMATIONEN";
+const MEMBER_ROLE = "1542602740771983553";
+const HANGAROUND_ROLE = "1568852155543191603";
 
-const UPDATE_INTERVAL = 15 * 60 * 1000;
-const MIN_COUNT_INTERVAL = 10 * 60 * 1000;
-const EVENT_DELAY = 45 * 1000;
+const CHECK_EVERY = 15 * 60 * 1000;
+const MIN_COUNT_GAP = 10 * 60 * 1000;
 
-const activeUpdates = new Set();
-const pendingUpdates = new Map();
-
-let updateTimer = null;
-
-// =====================================================
-// STANDARDWERTE
-// =====================================================
-
-// Bereits gespeicherte Werte werden nicht ueberschrieben.
+const INFO_CHANNELS = [
+  {
+    key: "memberCounterChannelId",
+    field: "members",
+    prefix: "👥・Mitglieder:",
+  },
+  {
+    key: "hangaroundCounterChannelId",
+    field: "hangarounds",
+    prefix: "🧊・Hangaround:",
+  },
+  {
+    key: "funkChannelId",
+    field: "funk",
+    prefix: "📻・Funk:",
+  },
+  {
+    key: "funkPasswordChannelId",
+    field: "funkPassword",
+    prefix: "🔑・Passwort-Funk:",
+  },
+  {
+    key: "darkChatChannelId",
+    field: "darkChat",
+    prefix: "💬・Dark Chat:",
+  },
+  {
+    key: "bennysPasswordChannelId",
+    field: "bennysPassword",
+    prefix: "🔧・Bennys PW:",
+  },
+  {
+    key: "casaChannelId",
+    field: "casa",
+    prefix: "🏠・Casa:",
+  },
+];
 
 const DEFAULT_INFO = {
   funk: "",
@@ -48,47 +82,10 @@ const DEFAULT_INFO = {
   casa: "5009",
 };
 
-// =====================================================
-// SIEBEN INFORMATIONSKANAELE
-// =====================================================
+let timer = null;
 
-const CHANNELS = [
-  {
-    key: "memberCounterChannelId",
-    type: "member",
-    prefix: "👥・Mitglieder:",
-  },
-  {
-    key: "hangaroundCounterChannelId",
-    type: "hangaround",
-    prefix: "🧊・Hangaround:",
-  },
-  {
-    key: "funkChannelId",
-    type: "funk",
-    prefix: "📻・Funk:",
-  },
-  {
-    key: "funkPasswordChannelId",
-    type: "funkPassword",
-    prefix: "🔑・Passwort-Funk:",
-  },
-  {
-    key: "darkChatChannelId",
-    type: "darkChat",
-    prefix: "💬・Dark Chat:",
-  },
-  {
-    key: "bennysPasswordChannelId",
-    type: "bennysPassword",
-    prefix: "🔧・Bennys PW:",
-  },
-  {
-    key: "casaChannelId",
-    type: "casa",
-    prefix: "🏠・Casa:",
-  },
-];
+const running = new Set();
+const requested = new Map();
 
 // =====================================================
 // SLASH COMMANDS
@@ -97,26 +94,24 @@ const CHANNELS = [
 const infoPanelCommand = new SlashCommandBuilder()
   .setName("server-infos")
   .setDescription(
-    "Veroeffentlicht oder aktualisiert die CC-Infotafel."
+    "CC-Infotafel veröffentlichen oder aktualisieren."
   );
 
 const editInfoCommand = new SlashCommandBuilder()
   .setName("server-infos-bearbeiten")
   .setDescription(
-    "Aendert Funk, Passwort, Dark Chat, Bennys PW und Casa."
+    "Funk, Passwörter und weitere CC-Infos bearbeiten."
   );
 
 const inviteInfoCommand = new SlashCommandBuilder()
   .setName("server-einladung")
   .setDescription(
-    "Aendert den Einladungslink der CC-Infotafel."
+    "Einladungslink der CC-Infotafel ändern."
   )
   .addStringOption(option =>
     option
       .setName("link")
-      .setDescription(
-        "Vollstaendiger HTTPS-Einladungslink"
-      )
+      .setDescription("HTTPS-Einladungslink")
       .setRequired(true)
       .setMaxLength(450)
   );
@@ -124,44 +119,28 @@ const inviteInfoCommand = new SlashCommandBuilder()
 const roleCounterCommand = new SlashCommandBuilder()
   .setName("rollen-zaehler")
   .setDescription(
-    "Prueft die sieben automatischen CC-Info-Sprachkanaele."
+    "Vorhandene CC-Infokanäle manuell aktualisieren."
   );
 
 // =====================================================
 // DATENSPEICHER
 // =====================================================
 
-function getState(data) {
+function stateOf(data) {
   data.ccServerInfo ||= {};
 
   const state = data.ccServerInfo;
 
   state.info ||= {};
 
-  for (const [key, value] of Object.entries(DEFAULT_INFO)) {
-    if (
-      state.info[key] === undefined ||
-      state.info[key] === null
-    ) {
+  for (
+    const [key, value]
+    of Object.entries(DEFAULT_INFO)
+  ) {
+    if (state.info[key] == null) {
       state.info[key] = value;
     }
   }
-
-  state.guildId ||= null;
-  state.categoryId ||= null;
-
-  state.panelChannelId ||= null;
-  state.panelMessageId ||= null;
-
-  state.inviteUrl ||= "";
-  state.lastCounterRefreshAt ||= 0;
-
-  for (const channel of CHANNELS) {
-    state[channel.key] ||= null;
-  }
-
-  // Alte Lagerfunk-ID nur fuer die Entfernung behalten.
-  state.lagerfunkChannelId ||= null;
 
   return state;
 }
@@ -170,41 +149,27 @@ function getState(data) {
 // BERECHTIGUNGEN
 // =====================================================
 
-function isLeader(member) {
-  // CC_SUPERADMIN: voller Zugriff auf Verwaltungsaktionen.
-  if (
-    member?.roles?.cache?.has(CONFIG.fullAccessRoleId) ||
+function hasAccess(member) {
+  return LEADER_IDS.some(id =>
+    member?.roles?.cache?.has?.(id) ||
     (
       Array.isArray(member?.roles) &&
-      member.roles.includes(CONFIG.fullAccessRoleId)
+      member.roles.includes(id)
     )
-  ) {
-    return true;
-  }
-
-  const roles = member?.roles;
-
-  if (typeof roles?.cache?.has === "function") {
-    return roles.cache.has(LEADER_ROLE_ID);
-  }
-
-  return (
-    Array.isArray(roles) &&
-    roles.includes(LEADER_ROLE_ID)
   );
 }
 
-async function requireLeader(interaction) {
+async function requireAccess(interaction) {
   if (
     interaction.inGuild() &&
-    isLeader(interaction.member)
+    hasAccess(interaction.member)
   ) {
     return true;
   }
 
   await safeReply(interaction, {
     content:
-      "❌ Nur die CC-Leaderschaft darf diese Infos verwalten.",
+      "❌ Nur Leaderschaft oder Vollzugriff dürfen die Infos verwalten.",
     ephemeral: true,
   });
 
@@ -212,48 +177,53 @@ async function requireLeader(interaction) {
 }
 
 // =====================================================
-// TEXTE
+// TEXTFORMATIERUNG
 // =====================================================
 
-function cleanText(value, length = 100) {
+function clean(value, max = 75) {
   return String(value ?? "")
     .trim()
-    .replace(/@everyone|@here/gi, "Mitglied")
     .replace(/[\r\n]/g, " ")
-    .slice(0, length);
+    .replace(/@everyone|@here/gi, "Mitglied")
+    .slice(0, max);
 }
 
-function embedValue(value) {
+function escaped(value) {
   return (
-    cleanText(value, 150) ||
-    "Noch nicht eingetragen"
+    clean(value, 150) || "Nicht eingestellt"
   ).replace(
     /([*_`~|>\\])/g,
     "\\$1"
   );
 }
 
+function validUrl(value) {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // =====================================================
-// ALLGEMEINE INFOTAFEL
+// ALLGEMEINE INFOS
 // =====================================================
 
 function infoEmbed(state) {
-  const info = state.info;
-
   return new EmbedBuilder()
     .setColor(0x2385c7)
     .setTitle("Allgemeine Infos")
     .setDescription(
       [
-        `**Funk:** ${embedValue(info.funk)}`,
-        `**Passwort-Funk:** ${embedValue(info.funkPassword)}`,
-        `**Dark Chat:** ${embedValue(info.darkChat)}`,
-        `**Bennys PW:** ${embedValue(info.bennysPassword)}`,
-        `**Casa:** ${embedValue(info.casa)}`,
+        `**Funk:** ${escaped(state.info.funk)}`,
+        `**Passwort-Funk:** ${escaped(state.info.funkPassword)}`,
+        `**Dark Chat:** ${escaped(state.info.darkChat)}`,
+        `**Bennys PW:** ${escaped(state.info.bennysPassword)}`,
+        `**Casa:** ${escaped(state.info.casa)}`,
         `**Invite-Link:** ${
           state.inviteUrl
             ? "Über den Button unten"
-            : "Noch nicht eingetragen"
+            : "Nicht eingestellt"
         }`,
       ].join("\n")
     )
@@ -263,25 +233,7 @@ function infoEmbed(state) {
     });
 }
 
-// =====================================================
-// EINLADUNGSLINK
-// =====================================================
-
-function validUrl(value) {
-  try {
-    const url = new URL(value);
-
-    return (
-      url.protocol === "https:" &&
-      Boolean(url.hostname)
-    );
-
-  } catch {
-    return false;
-  }
-}
-
-function infoComponents(state) {
+function infoButtons(state) {
   if (!validUrl(state.inviteUrl)) {
     return [];
   }
@@ -289,18 +241,18 @@ function infoComponents(state) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setStyle(ButtonStyle.Link)
         .setLabel("Einladungslink")
+        .setStyle(ButtonStyle.Link)
         .setURL(state.inviteUrl)
     ),
   ];
 }
 
 // =====================================================
-// INFOTAFEL AKTUALISIEREN
+// BESTEHENDE INFOTAFEL AKTUALISIEREN
 // =====================================================
 
-async function refreshInfoPanel(client, state) {
+async function updateInfoPanel(client, state) {
   if (
     !state.panelChannelId ||
     !state.panelMessageId
@@ -308,54 +260,50 @@ async function refreshInfoPanel(client, state) {
     return false;
   }
 
-  const channel = await client.channels
-    .fetch(state.panelChannelId)
-    .catch(() => null);
+  try {
+    const channel = await client.channels.fetch(
+      state.panelChannelId
+    );
 
-  const message = await channel?.messages
-    ?.fetch(state.panelMessageId)
-    .catch(() => null);
+    const message = await channel.messages.fetch(
+      state.panelMessageId
+    );
 
-  if (!message) {
+    await message.edit({
+      embeds: [infoEmbed(state)],
+      components: infoButtons(state),
+    });
+
+    return true;
+
+  } catch (error) {
+    console.error(
+      "❌ CC-Infotafel:",
+      error
+    );
+
     return false;
   }
-
-  await message.edit({
-    embeds: [
-      infoEmbed(state),
-    ],
-
-    components: infoComponents(state),
-  });
-
-  return true;
 }
 
 // =====================================================
-// INFOTAFEL POSTEN
+// INFOTAFEL VERÖFFENTLICHEN
 // =====================================================
 
-async function sendInfoPanel(client, interaction) {
+async function postPanel(client, interaction) {
   await interaction.deferReply({
     ephemeral: true,
   });
 
   const data = loadData();
-  const state = getState(data);
-
-  state.guildId = interaction.guildId;
+  const state = stateOf(data);
 
   if (
     state.panelChannelId === interaction.channelId &&
-    await refreshInfoPanel(
-      client,
-      state
-    ).catch(() => false)
+    await updateInfoPanel(client, state)
   ) {
-    saveData(data);
-
     return interaction.editReply(
-      "✅ Bestehende CC-Infotafel aktualisiert."
+      "✅ Bestehende Infotafel aktualisiert."
     );
   }
 
@@ -363,17 +311,14 @@ async function sendInfoPanel(client, interaction) {
     client,
     interaction.channelId,
     {
-      embeds: [
-        infoEmbed(state),
-      ],
-
-      components: infoComponents(state),
+      embeds: [infoEmbed(state)],
+      components: infoButtons(state),
     }
   );
 
   if (!message) {
     return interaction.editReply(
-      "❌ Die Infotafel konnte nicht gepostet werden."
+      "❌ Infotafel konnte nicht gesendet werden."
     );
   }
 
@@ -383,66 +328,43 @@ async function sendInfoPanel(client, interaction) {
   saveData(data);
 
   return interaction.editReply(
-    "✅ CC-Infotafel veröffentlicht."
+    "✅ Infotafel veröffentlicht."
   );
 }
 
 // =====================================================
-// FORMULAR ZUM BEARBEITEN
+// INFOFORMULAR
 // =====================================================
 
-function infoEditModal(info) {
+function editModal(info) {
   const modal = new ModalBuilder()
     .setCustomId("ccinfo_edit_modal")
-    .setTitle(
-      "CC • Allgemeine Infos bearbeiten"
-    );
+    .setTitle("CC • Allgemeine Infos");
 
   const fields = [
-    [
-      "funk",
-      "Funk",
-      "z. B. 191322",
-    ],
-    [
-      "funkPassword",
-      "Passwort-Funk",
-      "z. B. Drake",
-    ],
-    [
-      "darkChat",
-      "Dark Chat",
-      "z. B. 6WXME7",
-    ],
-    [
-      "bennysPassword",
-      "Bennys PW",
-      "z. B. Ein Scheiß kriegst du",
-    ],
-    [
-      "casa",
-      "Casa",
-      "z. B. 5009",
-    ],
+    ["funk", "Funk"],
+    ["funkPassword", "Passwort-Funk"],
+    ["darkChat", "Dark Chat"],
+    ["bennysPassword", "Bennys PW"],
+    ["casa", "Casa"],
   ];
 
-  for (const [key, label, placeholder] of fields) {
-    const field = new TextInputBuilder()
+  for (const [key, label] of fields) {
+    const input = new TextInputBuilder()
       .setCustomId(key)
       .setLabel(label)
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder(placeholder)
-      .setMaxLength(100)
-      .setRequired(false);
+      .setRequired(false)
+      .setMaxLength(90);
 
     if (info[key]) {
-      field.setValue(
-        cleanText(info[key])
+      input.setValue(
+        clean(info[key], 90)
       );
     }
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(field)
+      new ActionRowBuilder().addComponents(input)
     );
   }
 
@@ -450,18 +372,16 @@ function infoEditModal(info) {
 }
 
 // =====================================================
-// BEARBEITETE INFOS SPEICHERN
+// INFOS SPEICHERN
 // =====================================================
 
-async function saveInfoEdit(client, interaction) {
+async function saveInfo(client, interaction) {
   await interaction.deferReply({
     ephemeral: true,
   });
 
   const data = loadData();
-  const state = getState(data);
-
-  state.guildId = interaction.guildId;
+  const state = stateOf(data);
 
   for (const key of Object.keys(DEFAULT_INFO)) {
     state.info[key] = interaction.fields
@@ -471,7 +391,8 @@ async function saveInfoEdit(client, interaction) {
 
   saveData(data);
 
-  const updatedChannels = await syncVoiceInfoChannels(
+  // Ausschließlich vorhandene Kanäle bearbeiten.
+  const updated = await syncVoiceInfoChannels(
     client,
     interaction.guildId,
     {
@@ -479,39 +400,31 @@ async function saveInfoEdit(client, interaction) {
     }
   );
 
-  const updatedPanel = await refreshInfoPanel(
+  await updateInfoPanel(
     client,
     state
-  ).catch(() => false);
+  );
 
   return interaction.editReply(
-    "✅ Serverinfos gespeichert." +
-    (
-      updatedChannels
-        ? " Sprachkanäle aktualisiert."
-        : " Die Sprachkanäle werden beim nächsten Durchlauf aktualisiert."
-    ) +
-    (
-      updatedPanel
-        ? " Infotafel aktualisiert."
-        : ""
-    )
+    updated
+      ? "✅ Infos gespeichert und vorhandene Sprachkanäle aktualisiert."
+      : "✅ Infos gespeichert. Kanalaktualisierung vorerst nicht möglich, siehe Railway-Logs."
   );
 }
 
 // =====================================================
-// EINLADUNGSLINK SPEICHERN
+// EINLADUNGSLINK
 // =====================================================
 
-async function setInviteLink(client, interaction) {
-  const link = interaction.options
+async function setInvite(client, interaction) {
+  const url = interaction.options
     .getString("link", true)
     .trim();
 
-  if (!validUrl(link)) {
+  if (!validUrl(url)) {
     return safeReply(interaction, {
       content:
-        "❌ Bitte einen gültigen HTTPS-Link angeben.",
+        "❌ Ungültiger HTTPS-Link.",
       ephemeral: true,
     });
   }
@@ -521,17 +434,16 @@ async function setInviteLink(client, interaction) {
   });
 
   const data = loadData();
-  const state = getState(data);
+  const state = stateOf(data);
 
-  state.guildId = interaction.guildId;
-  state.inviteUrl = link;
+  state.inviteUrl = url;
 
   saveData(data);
 
-  await refreshInfoPanel(
+  await updateInfoPanel(
     client,
     state
-  ).catch(() => false);
+  );
 
   return interaction.editReply(
     "✅ Einladungslink gespeichert."
@@ -539,86 +451,25 @@ async function setInviteLink(client, interaction) {
 }
 
 // =====================================================
-// NAMEN DER SPRACHKANAELE
+// VORHANDENE SPRACHKANÄLE FINDEN
+// =====================================================
+//
+// 1. Zuerst die gespeicherte Kanal-ID prüfen.
+// 2. Falls nicht vorhanden, serverweit nach
+//    dem passenden Kanalnamen suchen.
+// 3. Niemals einen neuen Kanal erstellen.
+//
 // =====================================================
 
-function voiceName(entry, state, counts = {}) {
-  let value;
-
-  if (entry.type === "member") {
-    value = counts.members ?? "…";
-
-  } else if (entry.type === "hangaround") {
-    value = counts.hangarounds ?? "…";
-
-  } else {
-    value =
-      cleanText(state.info[entry.type], 70) ||
-      "Nicht eingestellt";
-  }
-
-  return `${entry.prefix} ${value}`.slice(0, 100);
-}
-
-function matchesType(channel, entry) {
-  return String(
-    channel.name || ""
-  ).startsWith(entry.prefix);
-}
-
-// =====================================================
-// KATEGORIE ERSTELLEN
-// =====================================================
-
-async function ensureCategory(guild, state) {
-  const cached = state.categoryId
-    ? guild.channels.cache.get(state.categoryId)
-    : null;
-
-  if (
-    cached?.type === ChannelType.GuildCategory
-  ) {
-    return cached;
-  }
-
-  const existing = guild.channels.cache.find(
-    channel =>
-      channel.type === ChannelType.GuildCategory &&
-      channel.name === CATEGORY_NAME
-  );
-
-  if (existing) {
-    state.categoryId = existing.id;
-
-    return existing;
-  }
-
-  const created = await guild.channels.create({
-    name: CATEGORY_NAME,
-
-    type: ChannelType.GuildCategory,
-
-    reason:
-      "CC-Assistent: Info-Kategorie",
-  });
-
-  state.categoryId = created.id;
-
-  return created;
-}
-
-// =====================================================
-// SPRACHKANAL ERSTELLEN / WIEDERVERWENDEN
-// =====================================================
-
-async function ensureVoice(
+async function findExistingVoice(
   guild,
   state,
-  category,
-  entry
+  specification
 ) {
-  const known = state[entry.key]
-    ? guild.channels.cache.get(state[entry.key])
+  const id = state[specification.key];
+
+  const known = id
+    ? guild.channels.cache.get(id)
     : null;
 
   if (
@@ -627,91 +478,23 @@ async function ensureVoice(
     return known;
   }
 
-  // Bereits vorhandene Kanaele verwenden.
-  const existing = guild.channels.cache.find(
+  const matched = guild.channels.cache.find(
     channel =>
       channel.type === ChannelType.GuildVoice &&
-      channel.parentId === category.id &&
-      matchesType(channel, entry)
-  );
-
-  if (existing) {
-    state[entry.key] = existing.id;
-
-    return existing;
-  }
-
-  // Noch nicht vorhanden: automatisch erstellen.
-  const created = await guild.channels.create({
-    name: voiceName(entry, state),
-
-    type: ChannelType.GuildVoice,
-
-    parent: category.id,
-
-    // Reine Info-Sprachkanaele.
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-        ],
-
-        deny: [
-          PermissionFlagsBits.Connect,
-        ],
-      },
-    ],
-
-    reason:
-      "CC-Assistent: Info-Sprachkanal",
-  });
-
-  state[entry.key] = created.id;
-
-  return created;
-}
-
-// =====================================================
-// ALTEN LAGERFUNK-KANAL ENTFERNEN
-// =====================================================
-
-async function removeLegacyLagerfunk(
-  guild,
-  state,
-  category
-) {
-  // Nur die alten Info-Kanaele in unserer
-  // CC-Informationskategorie entfernen.
-  // Andere Discord-Kanaele bleiben unangetastet.
-
-  const legacy = guild.channels.cache.filter(
-    channel =>
-      channel.type === ChannelType.GuildVoice &&
-      channel.parentId === category.id &&
       String(channel.name || "").startsWith(
-        "🔐・Lagerfunk:"
+        specification.prefix
       )
   );
 
-  for (const channel of legacy.values()) {
-    await channel.delete(
-      "CC: Alter Lagerfunk-Infokanal wird nicht mehr verwendet"
-    );
-
-    console.log(
-      `🗑️ Alter Lagerfunk-Infokanal entfernt: ${channel.id}`
-    );
+  if (matched) {
+    state[specification.key] = matched.id;
   }
 
-  state.lagerfunkChannelId = null;
-
-  delete state.info.lagerfunk;
+  return matched || null;
 }
 
 // =====================================================
-// MITGLIEDER UND HANGAROUNDS ZAEHLEN
+// MITGLIEDER UND HANGAROUNDS ZÄHLEN
 // =====================================================
 
 async function countRoles(guild) {
@@ -721,10 +504,9 @@ async function countRoles(guild) {
   let after;
 
   while (true) {
-    // Discord REST: keine Gateway-Mitgliederabfrage.
     const batch = await guild.members.list({
       limit: 1000,
-      after,
+      ...(after ? { after } : {}),
     });
 
     if (!batch.size) {
@@ -737,13 +519,13 @@ async function countRoles(guild) {
       }
 
       if (
-        member.roles.cache.has(MEMBER_ROLE_ID)
+        member.roles.cache.has(MEMBER_ROLE)
       ) {
         members++;
       }
 
       if (
-        member.roles.cache.has(HANGAROUND_ROLE_ID)
+        member.roles.cache.has(HANGAROUND_ROLE)
       ) {
         hangarounds++;
       }
@@ -753,18 +535,15 @@ async function countRoles(guild) {
       break;
     }
 
-    const lastId = batch.lastKey();
+    const next = batch.lastKey();
 
-    if (
-      !lastId ||
-      lastId === after
-    ) {
+    if (!next || next === after) {
       throw new Error(
-        "CC: Mitgliederliste konnte nicht vollständig geladen werden."
+        "Discord-Mitgliederliste konnte nicht vollständig gelesen werden."
       );
     }
 
-    after = lastId;
+    after = next;
   }
 
   return {
@@ -774,137 +553,127 @@ async function countRoles(guild) {
 }
 
 // =====================================================
-// ALLE KANAELE AUTOMATISCH AKTUALISIEREN
+// VORHANDENE SPRACHKANÄLE AKTUALISIEREN
 // =====================================================
 
 async function syncVoiceInfoChannels(
   client,
   guildId,
-  options = {}
-) {
-  const {
-    staticOnly = false,
+  {
     force = false,
-  } = options;
-
+    staticOnly = false,
+  } = {}
+) {
   if (
     !guildId ||
-    activeUpdates.has(guildId)
+    running.has(guildId)
   ) {
     return false;
   }
 
-  activeUpdates.add(guildId);
+  running.add(guildId);
 
   try {
     const guild =
       client.guilds.cache.get(guildId) ||
       await client.guilds.fetch(guildId);
 
-    // Bestehende Kanalnamen laden.
+    // Vorhandene Kanäle abrufen.
+    // KEINE neuen erstellen.
     await guild.channels.fetch();
 
     const data = loadData();
-    const state = getState(data);
+    const state = stateOf(data);
 
-    state.guildId = guildId;
+    const found = new Map();
 
-    // Kategorie sicherstellen.
-    const category = await ensureCategory(
-      guild,
-      state
-    );
-
-    saveData(data);
-
-    // Alten Lagerfunk entfernen.
-    await removeLegacyLagerfunk(
-      guild,
-      state,
-      category
-    );
-
-    saveData(data);
-
-    // Alle sieben Kanaele erstellen oder wiederverwenden.
-    const channels = {};
-
-    for (const entry of CHANNELS) {
-      channels[entry.type] = await ensureVoice(
+    for (const specification of INFO_CHANNELS) {
+      const channel = await findExistingVoice(
         guild,
         state,
-        category,
-        entry
+        specification
       );
 
-      // Nach jeder Erstellung sofort speichern.
-      saveData(data);
+      if (channel) {
+        found.set(
+          specification.field,
+          channel
+        );
+      } else {
+        console.warn(
+          `⚠️ CC-Infokanal fehlt (wird NICHT neu erstellt): ${specification.prefix}`
+        );
+      }
     }
 
+    // Gefundene Kanal-IDs dauerhaft speichern.
+    saveData(data);
+
     // =================================================
-    // FESTE INFOWERTE AKTUALISIEREN
+    // FESTE INFORMATIONEN
     // =================================================
 
-    for (
-      const entry of CHANNELS.filter(
-        e =>
-          ![
-            "member",
-            "hangaround",
-          ].includes(e.type)
-      )
-    ) {
-      const channel = channels[entry.type];
-
-      const wanted = voiceName(
-        entry,
-        state
+    for (const specification of INFO_CHANNELS.slice(2)) {
+      const channel = found.get(
+        specification.field
       );
 
-      if (channel.name !== wanted) {
+      if (!channel) {
+        continue;
+      }
+
+      const expected = (
+        `${specification.prefix} ` +
+        `${
+          clean(
+            state.info[specification.field],
+            70
+          ) || "Nicht eingestellt"
+        }`
+      ).slice(0, 100);
+
+      // Nur ändern, wenn der Wert abweicht.
+      if (channel.name !== expected) {
         await channel.setName(
-          wanted,
-          "CC: Infos aktualisiert"
+          expected,
+          "CC-Info aktualisiert"
         );
       }
     }
 
     // =================================================
-    // MITGLIEDERZAHLEN AKTUALISIEREN
+    // MITGLIEDERZAHLEN
     // =================================================
 
-    const shouldCount =
-      !staticOnly &&
-      (
-        force ||
-        Date.now() -
-          state.lastCounterRefreshAt >=
-          MIN_COUNT_INTERVAL
-      );
+    const enoughTime =
+      Date.now() -
+      Number(state.lastCounterRefreshAt || 0) >=
+      MIN_COUNT_GAP;
 
-    if (shouldCount) {
+    if (
+      !staticOnly &&
+      (force || enoughTime)
+    ) {
       const counts = await countRoles(guild);
 
-      for (const type of [
-        "member",
-        "hangaround",
-      ]) {
-        const entry = CHANNELS.find(
-          e => e.type === type
+      for (const specification of INFO_CHANNELS.slice(0, 2)) {
+        const channel = found.get(
+          specification.field
         );
 
-        const channel = channels[type];
+        if (!channel) {
+          continue;
+        }
 
-        const wanted = voiceName(
-          entry,
-          state,
-          counts
-        );
+        const expected =
+          `${specification.prefix} ` +
+          `${counts[specification.field]}`;
 
-        if (channel.name !== wanted) {
+        // Nur bei veränderter Zahl umbenennen.
+        if (channel.name !== expected) {
           await channel.setName(
-            wanted,
-            "CC: Rollenzähler aktualisiert"
+            expected,
+            "CC-Rollenzähler aktualisiert"
           );
         }
       }
@@ -914,7 +683,8 @@ async function syncVoiceInfoChannels(
       saveData(data);
 
       console.log(
-        `✅ CC-Infos: ${counts.members} Mitglieder, ` +
+        `✅ CC-Rollenzähler: ` +
+        `${counts.members} Mitglieder / ` +
         `${counts.hangarounds} Hangarounds`
       );
     }
@@ -923,60 +693,56 @@ async function syncVoiceInfoChannels(
 
   } catch (error) {
     console.error(
-      "❌ CC-Info-Kanäle konnten nicht aktualisiert werden:",
+      "❌ CC-Sprachkanäle aktualisieren:",
       error
     );
 
     return false;
 
   } finally {
-    activeUpdates.delete(guildId);
+    running.delete(guildId);
   }
 }
 
 // =====================================================
-// AKTUALISIERUNG BEI ROLLENAENDERUNG
+// AKTUALISIERUNG BEI ROLLENÄNDERUNGEN
 // =====================================================
 
 function requestCounterRefresh(client, guildId) {
   if (
     !guildId ||
-    pendingUpdates.has(guildId)
+    requested.has(guildId)
   ) {
     return;
   }
 
-  const state = getState(
-    loadData()
-  );
+  const state = stateOf(loadData());
 
-  const elapsed =
-    Date.now() -
-    Number(state.lastCounterRefreshAt || 0);
+  const remaining =
+    MIN_COUNT_GAP -
+    (
+      Date.now() -
+      Number(state.lastCounterRefreshAt || 0)
+    );
 
-  const delay = Math.max(
-    EVENT_DELAY,
-    MIN_COUNT_INTERVAL - elapsed + 2000
-  );
-
-  const timer = setTimeout(async () => {
-    pendingUpdates.delete(guildId);
+  const timeout = setTimeout(async () => {
+    requested.delete(guildId);
 
     await syncVoiceInfoChannels(
       client,
       guildId
     );
-  }, delay);
+  }, Math.max(45000, remaining + 2000));
 
-  pendingUpdates.set(guildId, timer);
+  requested.set(guildId, timeout);
 }
 
 // =====================================================
-// AUTOMATISCH BEIM BOTSTART
+// AUTOMATISCHER START
 // =====================================================
 
 function startServerInfoUpdater(client) {
-  if (updateTimer) {
+  if (timer) {
     return;
   }
 
@@ -984,19 +750,14 @@ function startServerInfoUpdater(client) {
 
   if (!guildId) {
     console.error(
-      "❌ GUILD_ID fehlt für die CC-Info-Kanäle."
+      "❌ CC-Infokanäle: GUILD_ID fehlt."
     );
 
     return;
   }
 
-  // Beim Botstart:
-  // 1. Kategorie erstellen
-  // 2. Lagerfunk entfernen
-  // 3. Sieben Sprachkanaele erstellen
-  // 4. Mitglieder und Hangarounds zaehlen
-  // 5. Alle Namen aktualisieren
-
+  // Beim Start ausschließlich vorhandene
+  // Sprachkanäle suchen und aktualisieren.
   void syncVoiceInfoChannels(
     client,
     guildId,
@@ -1005,13 +766,13 @@ function startServerInfoUpdater(client) {
     }
   );
 
-  // Danach alle 15 Minuten aktualisieren.
-  updateTimer = setInterval(() => {
+  // Danach alle 15 Minuten prüfen.
+  timer = setInterval(() => {
     void syncVoiceInfoChannels(
       client,
       guildId
     );
-  }, UPDATE_INTERVAL);
+  }, CHECK_EVERY);
 }
 
 // =====================================================
@@ -1024,91 +785,78 @@ async function handleServerInfoInteraction(
 ) {
   const command = interaction.isChatInputCommand()
     ? interaction.commandName
-    : null;
+    : "";
 
-  // INFOTAFEL
-  if (command === "server-infos") {
-    if (!(await requireLeader(interaction))) {
+  if (
+    [
+      "server-infos",
+      "server-infos-bearbeiten",
+      "server-einladung",
+      "rollen-zaehler",
+    ].includes(command)
+  ) {
+    if (
+      !await requireAccess(interaction)
+    ) {
       return true;
     }
 
-    await sendInfoPanel(
-      client,
-      interaction
-    );
+    if (command === "server-infos") {
+      await postPanel(
+        client,
+        interaction
+      );
+    }
+
+    if (command === "server-infos-bearbeiten") {
+      await interaction.showModal(
+        editModal(
+          stateOf(loadData()).info
+        )
+      );
+    }
+
+    if (command === "server-einladung") {
+      await setInvite(
+        client,
+        interaction
+      );
+    }
+
+    if (command === "rollen-zaehler") {
+      await interaction.deferReply({
+        ephemeral: true,
+      });
+
+      const updated = await syncVoiceInfoChannels(
+        client,
+        interaction.guildId,
+        {
+          force: true,
+        }
+      );
+
+      await interaction.editReply(
+        updated
+          ? "✅ Vorhandene Infokanäle aktualisiert."
+          : "❌ Aktualisierung fehlgeschlagen, siehe Railway-Logs."
+      );
+    }
 
     return true;
   }
 
-  // INFOS BEARBEITEN
-  if (command === "server-infos-bearbeiten") {
-    if (!(await requireLeader(interaction))) {
-      return true;
-    }
-
-    const state = getState(
-      loadData()
-    );
-
-    await interaction.showModal(
-      infoEditModal(state.info)
-    );
-
-    return true;
-  }
-
-  // EINLADUNGSLINK
-  if (command === "server-einladung") {
-    if (!(await requireLeader(interaction))) {
-      return true;
-    }
-
-    await setInviteLink(
-      client,
-      interaction
-    );
-
-    return true;
-  }
-
-  // MANUELLE AKTUALISIERUNG
-  if (command === "rollen-zaehler") {
-    if (!(await requireLeader(interaction))) {
-      return true;
-    }
-
-    await interaction.deferReply({
-      ephemeral: true,
-    });
-
-    const success = await syncVoiceInfoChannels(
-      client,
-      interaction.guildId,
-      {
-        force: true,
-      }
-    );
-
-    await interaction.editReply(
-      success
-        ? "✅ Alle sieben CC-Info-Sprachkanäle wurden aktualisiert."
-        : "⚠️ Aktualisierung fehlgeschlagen. Prüfe 'Kanäle verwalten' und das Terminal."
-    );
-
-    return true;
-  }
-
-  // INFOFORMULAR SPEICHERN
   if (
     interaction.isModalSubmit() &&
-    interaction.customId ===
-      "ccinfo_edit_modal"
+    interaction.customId === "ccinfo_edit_modal"
   ) {
-    if (!(await requireLeader(interaction))) {
+    if (
+      !await requireAccess(interaction)
+    ) {
       return true;
     }
 
-    await saveInfoEdit(
+    await saveInfo(
       client,
       interaction
     );
@@ -1130,7 +878,6 @@ module.exports = {
   roleCounterCommand,
 
   handleServerInfoInteraction,
-
   startServerInfoUpdater,
   requestCounterRefresh,
 };
