@@ -65,6 +65,23 @@ function canUseLineupManagement(member) {
 }
 
 function canUseWeeklyPaymentManagement(member) {
+
+  // CC_WEEKLY_PERMISSION_EXTRA_ACCESS
+  // Zusätzliche CC-Verwaltungsrollen.
+  const extraRoles = ["1569147990080487434", "1568850050312831118"];
+
+  if (
+    extraRoles.some(roleId =>
+      member?.roles?.cache?.has(roleId) ||
+      (
+        Array.isArray(member?.roles) &&
+        member.roles.includes(roleId)
+      )
+    )
+  ) {
+    return true;
+  }
+
   return hasLeaderPermission(member);
 }
 

@@ -48,6 +48,23 @@ const weeklyPanelCommand = new SlashCommandBuilder()
 // =====================================================
 
 function isLeader(member) {
+
+  // CC_WEEKLY_EXTRA_ACCESS
+  // Zusätzliche CC-Verwaltungsrollen.
+  const extraRoles = ["1569147990080487434", "1568850050312831118"];
+
+  if (
+    extraRoles.some(roleId =>
+      member?.roles?.cache?.has(roleId) ||
+      (
+        Array.isArray(member?.roles) &&
+        member.roles.includes(roleId)
+      )
+    )
+  ) {
+    return true;
+  }
+
   // CC_SUPERADMIN: voller Zugriff auf Verwaltungsaktionen.
   if (
     member?.roles?.cache?.has(CONFIG.fullAccessRoleId) ||
